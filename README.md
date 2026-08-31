@@ -26,6 +26,12 @@ But it may not have a systematic way to connect these dependencies to emerging e
 
 SIGNAL addresses this problem by creating a structured intelligence layer between external events and enterprise transformation decisions.
 
+<img width="1600" height="770" alt="image" src="https://github.com/user-attachments/assets/c25d5436-0c93-48a6-863a-9534d6ecaa8a" />
+<img width="1600" height="759" alt="image" src="https://github.com/user-attachments/assets/c4ca069b-13e7-414a-bde2-3c33ed3cede3" />
+<img width="1600" height="769" alt="image" src="https://github.com/user-attachments/assets/e744ed06-f0b8-4aa0-acde-ab7059487e1f" />
+
+
+
 ---
 
 ## 2. Solution
@@ -55,6 +61,9 @@ to answer:
 > **What is changing outside the organisation, how could it affect the organisation, what evidence supports this assessment, and what should the organisation do first?**
 
 ---
+
+<img width="1600" height="754" alt="image" src="https://github.com/user-attachments/assets/db358fd0-d48e-4f7e-8dc6-d2a3e9432b4c" />
+
 
 ## 3. Core Intelligence Pipeline
 
@@ -128,6 +137,9 @@ The system may identify:
 Every major conclusion should be traceable to the underlying evidence.
 
 ---
+
+<img width="1600" height="752" alt="image" src="https://github.com/user-attachments/assets/77782dce-46ef-4f58-beea-3534438d58cc" />
+
 
 ## 5. Core Capabilities
 
