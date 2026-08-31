@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SIGNAL — AuraTech Electronics Risk &amp; Transformation Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+
+/* ============================================================
+   DESIGN TOKENS
+   Direction: signals-intelligence / command-center briefing —
+   not the default dark+cyan SaaS dashboard. Amber "signal" color
+   (sodium-lamp / radar-scope reference), monospace data readouts,
+   wire-ticker, reticle corner marks in place of card shadows.
+   ============================================================ */
+:root{
+  /* color */
+  --ink:        #0A0C10;   /* base background — cool graphite, not pure black */
+  --panel:      #12151B;   /* surface */
+  --panel-2:    #171B22;   /* raised surface (hero) */
+  --line:       #262B33;   /* hairline / grid */
+  --line-soft:  #1B1F27;
+  --paper:      #E9E6DC;   /* primary text — warm off-white, teleprinter paper */
+  --paper-dim:  #9298A3;   /* secondary text */
+  --paper-faint:#5B616D;   /* tertiary / metadata */
+  --signal:     #FF6A2E;   /* primary accent — sodium amber */
+  --signal-dim: #7A3E22;
+  --alert:      #FF3B3B;   /* critical */
+  --caution:    #F2C24C;   /* medium */
+  --confirmed:  #33D18E;   /* verified / traceable */
+
+  /* type */
+  --f-display: 'Space Grotesk', sans-serif;
+  --f-body:    'IBM Plex Sans', sans-serif;
+  --f-mono:    'IBM Plex Mono', monospace;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+html{ color-scheme: dark; }
+body{
+  background:
+    radial-gradient(ellipse 900px 500px at 82% -10%, rgba(255,106,46,0.07), transparent 60%),
+    var(--ink);
+  color:var(--paper);
+  font-family:var(--f-body);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* faint lat/long grid texture across the whole page */
+body::before{
+  content:"";
+  position:fixed; inset:0;
+  pointer-events:none;
+  z-index:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(180deg, black, black 30%, transparent 85%);
+}
+
+a{ color:inherit; text-decoration:none; }
+button{ font-family:inherit; cursor:pointer; }
+
+.wrap{ max-width:1320px; margin:0 auto; padding:0 32px; position:relative; z-index:1; }
+
+/* ---------- reticle corner marks: recurring structural device ---------- */
+.reticle{ position:relative; }
+.reticle::before,
+.reticle::after,
+.reticle .tick-tr,
+.reticle .tick-bl{
+  content:""; position:absolute; width:14px; height:14px;
+  border-color:var(--signal); border-style:solid; opacity:0.55;
+}
+.reticle::before{ top:-1px; left:-1px; border-width:1.5px 0 0 1.5px; }
+.reticle::after{  bottom:-1px; right:-1px; border-width:0 1.5px 1.5px 0; }
+.reticle .tick-tr{ top:-1px; right:-1px; border-width:1.5px 1.5px 0 0; }
+.reticle .tick-bl{ bottom:-1px; left:-1px; border-width:0 0 1.5px 1.5px; }
+
+/* ============================================================
+   NAV
+   ============================================================ */
+.topbar{
+  border-bottom:1px solid var(--line);
+  background:rgba(10,12,16,0.85);
+  backdrop-filter:blur(6px);
+  position:sticky; top:0; z-index:20;
+}
+.topbar-inner{
+  display:flex; align-items:center; justify-content:space-between;
+  height:64px;
+}
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:34px; height:34px; border:1px solid var(--signal-dim);
+  display:flex; align-items:center; justify-content:center;
+  position:relative; flex-shrink:0;
+}
+.brand-mark .dot{
+  width:6px; height:6px; border-radius:50%;
+  background:var(--signal);
+  box-shadow:0 0 8px 1px var(--signal);
+  animation: blip 2.4s ease-in-out infinite;
+}
+@keyframes blip{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+.brand-text{ display:flex; flex-direction:column; line-height:1.05; }
+.brand-text .name{
+  font-family:var(--f-display); font-weight:700; font-size:16px;
+  letter-spacing:0.12em;
+}
+.brand-text .sub{
+  font-family:var(--f-mono); font-size:9.5px; color:var(--paper-faint);
+  letter-spacing:0.06em; margin-top:3px;
+}
+.build-tag{
+  font-family:var(--f-mono); font-size:9.5px; color:var(--signal);
+  border:1px solid var(--signal-dim); padding:2px 6px; margin-left:8px;
+  letter-spacing:0.04em;
+}
+
+nav.primary{ display:flex; align-items:center; gap:2px; }
+nav.primary a{
+  font-family:var(--f-mono); font-size:11.5px; letter-spacing:0.05em;
+  color:var(--paper-dim); padding:9px 14px; position:relative;
+  transition:color .15s ease;
+}
+nav.primary a:hover{ color:var(--paper); }
+nav.primary a.active{ color:var(--paper); }
+nav.primary a.active::after{
+  content:""; position:absolute; left:14px; right:14px; bottom:0;
+  height:2px; background:var(--signal);
+}
+
+.status-cluster{ display:flex; align-items:center; gap:16px; }
+.utc{
+  font-family:var(--f-mono); font-size:11px; color:var(--paper-dim);
+  letter-spacing:0.03em;
+}
+.utc b{ color:var(--paper); font-weight:500; }
+.status-pill{
+  display:flex; align-items:center; gap:7px;
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:0.05em;
+  color:var(--confirmed); border:1px solid rgba(51,209,142,0.3);
+  padding:6px 10px;
+}
+.status-pill .dot{ width:5px; height:5px; border-radius:50%; background:var(--confirmed); }
+
+/* ============================================================
+   WIRE TICKER
+   ============================================================ */
+.ticker{
+  border-bottom:1px solid var(--line);
+  background:var(--panel);
+  overflow:hidden;
+  white-space:nowrap;
+  position:relative;
+}
+.ticker::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg, var(--panel) 0%, transparent 4%, transparent 96%, var(--panel) 100%);
+  pointer-events:none;
+}
+.ticker-track{
+  display:inline-flex; align-items:center;
+  animation: ticker-scroll 42s linear infinite;
+  padding:9px 0;
+}
+@keyframes ticker-scroll{
+  0%{ transform:translateX(0); }
+  100%{ transform:translateX(-50%); }
+}
+.ticker-item{
+  font-family:var(--f-mono); font-size:11px; color:var(--paper-dim);
+  display:inline-flex; align-items:center; gap:8px;
+  padding:0 22px; letter-spacing:0.02em;
+}
+.ticker-item .sev{ color:var(--signal); font-weight:600; }
+.ticker-item .sep{ color:var(--line); }
+
+@media (prefers-reduced-motion: reduce){
+  .ticker-track{ animation:none; }
+  .brand-mark .dot{ animation:none; }
+}
+
+/* ============================================================
+   HERO / BRIEFING PANEL
+   ============================================================ */
+.hero{
+  margin-top:28px;
+  border:1px solid var(--line);
+  background:
+    linear-gradient(160deg, rgba(255,106,46,0.05), transparent 55%),
+    var(--panel-2);
+  padding:36px 40px;
+  display:grid;
+  grid-template-columns:1fr 300px;
+  gap:32px;
+  align-items:center;
+}
+.eyebrow{
+  font-family:var(--f-mono); font-size:11px; letter-spacing:0.14em;
+  color:var(--signal); display:flex; align-items:center; gap:8px;
+  margin-bottom:16px;
+}
+.eyebrow .rule{ width:22px; height:1px; background:var(--signal); opacity:.6; }
+h1.hero-title{
+  font-family:var(--f-display); font-weight:700;
+  font-size:clamp(28px, 3.4vw, 42px);
+  line-height:1.08; letter-spacing:-0.01em;
+  max-width:640px;
+}
+h1.hero-title .accent{ color:var(--signal); }
+.hero-sub{
+  font-family:var(--f-body); font-size:14.5px; color:var(--paper-dim);
+  line-height:1.6; max-width:560px; margin-top:14px;
+}
+.hero-actions{ display:flex; gap:12px; margin-top:26px; }
+.btn{
+  font-family:var(--f-mono); font-size:12px; letter-spacing:0.03em;
+  padding:12px 18px; border:1px solid var(--line);
+  display:inline-flex; align-items:center; gap:9px;
+  transition:border-color .15s ease, background .15s ease;
+}
+.btn::before{ content:"["; color:var(--paper-faint); }
+.btn::after{ content:"]"; color:var(--paper-faint); }
+.btn-primary{
+  background:var(--signal); border-color:var(--signal); color:#1A0D06;
+  font-weight:600;
+}
+.btn-primary::before, .btn-primary::after{ content:""; }
+.btn-primary:hover{ background:#FF7D48; }
+.btn-ghost{ color:var(--paper); }
+.btn-ghost:hover{ border-color:var(--paper-dim); }
+.btn:focus-visible, a:focus-visible, nav.primary a:focus-visible{
+  outline:1.5px solid var(--signal); outline-offset:2px;
+}
+
+/* corridor trace — signature element */
+.corridor{
+  border-left:1px solid var(--line);
+  padding-left:28px;
+  display:flex; flex-direction:column; gap:10px;
+}
+.corridor-label{
+  font-family:var(--f-mono); font-size:9.5px; color:var(--paper-faint);
+  letter-spacing:0.08em;
+}
+.corridor svg{ width:100%; height:auto; display:block; }
+.corridor-coords{
+  font-family:var(--f-mono); font-size:9.5px; color:var(--paper-faint);
+  display:flex; justify-content:space-between;
+}
+
+/* ============================================================
+   KPI STRIP
+   ============================================================ */
+.kpi-strip{
+  margin-top:22px;
+  display:grid; grid-template-columns:repeat(4, 1fr);
+  border:1px solid var(--line);
+  background:var(--panel);
+}
+.kpi{
+  padding:22px 26px;
+  border-right:1px solid var(--line);
+  position:relative;
+}
+.kpi:last-child{ border-right:none; }
+.kpi-head{
+  display:flex; align-items:center; justify-content:space-between;
+  font-family:var(--f-mono); font-size:10px; letter-spacing:0.08em;
+  color:var(--paper-faint); margin-bottom:14px;
+}
+.kpi-head .ico{ color:var(--signal); font-size:12px; }
+.kpi-value{
+  font-family:var(--f-display); font-weight:600; font-size:32px;
+  display:flex; align-items:baseline; gap:8px; font-variant-numeric:tabular-nums;
+}
+.kpi-value .unit{
+  font-family:var(--f-mono); font-size:12px; color:var(--paper-dim); font-weight:400;
+}
+.kpi-value.crit{ color:var(--alert); }
+.kpi-foot{
+  font-family:var(--f-mono); font-size:10.5px; color:var(--paper-faint);
+  margin-top:10px; letter-spacing:0.01em;
+}
+
+/* ============================================================
+   LOG LISTS (risk assessments / osint signals)
+   ============================================================ */
+.section-grid{
+  margin-top:32px; margin-bottom:60px;
+  display:grid; grid-template-columns:1.35fr 1fr; gap:28px;
+  align-items:start;
+}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:14px;
+}
+.panel-title{
+  font-family:var(--f-display); font-weight:600; font-size:16px;
+  display:flex; align-items:center; gap:9px;
+}
+.panel-title .sw{ color:var(--signal); font-size:13px; }
+.panel-link{
+  font-family:var(--f-mono); font-size:11px; color:var(--signal);
+  letter-spacing:0.02em;
+}
+
+.log{ border:1px solid var(--line); background:var(--panel); }
+.log-item{
+  padding:20px 22px;
+  border-bottom:1px solid var(--line);
+  display:grid; grid-template-columns:1fr auto; gap:16px; align-items:start;
+  position:relative;
+}
+.log-item:last-child{ border-bottom:none; }
+.log-item::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:2px;
+}
+.log-item.sev-critical::before{ background:var(--alert); }
+.log-item.sev-medium::before{ background:var(--caution); }
+.log-item.sev-info::before{ background:var(--paper-faint); }
+
+.tag-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.tag{
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:0.06em;
+  padding:3px 7px; border:1px solid currentColor;
+}
+.tag.critical{ color:var(--alert); }
+.tag.medium{ color:var(--caution); }
+.tag.category{ color:var(--paper-faint); border-color:var(--line); font-family:var(--f-body); font-size:11px; padding:0; border:none; letter-spacing:0; }
+.log-item h3{
+  font-family:var(--f-display); font-weight:600; font-size:15.5px;
+  margin-bottom:8px; line-height:1.3;
+}
+.log-item p{
+  font-family:var(--f-body); font-size:13px; color:var(--paper-dim);
+  line-height:1.55; max-width:52ch;
+}
+.meta-line{
+  font-family:var(--f-mono); font-size:10.5px; color:var(--paper-faint);
+  margin-top:12px; display:flex; gap:14px; flex-wrap:wrap;
+}
+.meta-line .v{ color:var(--paper); }
+.score-block{ text-align:right; flex-shrink:0; }
+.score-label{ font-family:var(--f-mono); font-size:9px; color:var(--paper-faint); letter-spacing:0.06em; margin-bottom:6px; }
+.score-value{ font-family:var(--f-mono); font-size:14px; font-weight:600; }
+
+.signal-item p.body{
+  font-family:var(--f-body); font-size:12.5px; color:var(--paper-dim);
+  line-height:1.55; margin-top:8px;
+}
+.signal-foot{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top:12px;
+}
+.source-line{ font-family:var(--f-mono); font-size:10px; color:var(--paper-faint); line-height:1.5; max-width:70%; }
+.verified{
+  font-family:var(--f-mono); font-size:9.5px; color:var(--confirmed);
+  display:flex; align-items:center; gap:5px;
+}
+.verified::before{ content:"●"; font-size:6px; }
+.date-tag{ font-family:var(--f-mono); font-size:10px; color:var(--paper-faint); }
+
+/* responsive */
+@media (max-width: 980px){
+  .hero{ grid-template-columns:1fr; }
+  .corridor{ border-left:none; padding-left:0; border-top:1px solid var(--line); padding-top:20px; }
+  .kpi-strip{ grid-template-columns:1fr 1fr; }
+  .kpi:nth-child(2){ border-right:none; }
+  .kpi:nth-child(1), .kpi:nth-child(2){ border-bottom:1px solid var(--line); }
+  .section-grid{ grid-template-columns:1fr; }
+  nav.primary{ display:none; }
+}
+@media (max-width: 620px){
+  .wrap{ padding:0 18px; }
+  .hero{ padding:24px 22px; }
+  .kpi-strip{ grid-template-columns:1fr; }
+  .kpi{ border-right:none; border-bottom:1px solid var(--line); }
+  .status-cluster .utc{ display:none; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <div class="brand-mark"><span class="dot"></span></div>
+      <div class="brand-text">
+        <span class="name">SIGNAL</span>
+        <span class="sub">STRATEGIC GEOPOLITICAL INTELLIGENCE</span>
+      </div>
+      <span class="build-tag">ENGINE V1.0</span>
+    </div>
+    <nav class="primary">
+      <a href="#" class="active">OVERVIEW</a>
+      <a href="#">ENTERPRISE GRAPH</a>
+      <a href="#">OSINT INGESTION</a>
+      <a href="#">RISK &amp; TRACEABILITY</a>
+      <a href="#">AI TRANSFORMATION</a>
+      <a href="#">ASSISTANT</a>
+    </nav>
+    <div class="status-cluster">
+      <span class="utc" id="utcClock">UTC 00:00:00</span>
+      <span class="status-pill"><span class="dot"></span>API ONLINE</span>
+    </div>
+  </div>
+</header>
+
+<div class="ticker">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<main class="wrap">
+
+  <section class="hero reticle">
+    <div class="tick-tr"></div><div class="tick-bl"></div>
+    <div>
+      <div class="eyebrow"><span class="rule"></span>STRATEGIC INTELLIGENCE OPERATING PICTURE</div>
+      <h1 class="hero-title">AuraTech Electronics <span class="accent">Risk &amp; Transformation Radar</span></h1>
+      <p class="hero-sub">Monitoring global geopolitical events, export-restriction notices, and Taiwan Strait freight corridors — mapped directly to semiconductor PCB assembly lines and revenue streams.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary">INGEST DYNAMIC SIGNAL</button>
+        <button class="btn btn-ghost">ASK AI ASSISTANT</button>
+      </div>
+    </div>
+    <div class="corridor">
+      <span class="corridor-label">TAIWAN STRAIT FREIGHT CORRIDOR — LIVE TRACE</span>
+      <svg viewBox="0 0 260 130" fill="none">
+        <!-- landmasses, schematic -->
+        <path d="M0 20 L40 15 L55 40 L48 70 L20 85 L0 78 Z" fill="#1B1F27" stroke="#262B33"/>
+        <path d="M200 10 L260 5 L260 60 L230 75 L195 55 Z" fill="#1B1F27" stroke="#262B33"/>
+        <path d="M180 90 L230 85 L260 110 L260 130 L190 130 L170 110 Z" fill="#1B1F27" stroke="#262B33"/>
+        <!-- corridor line -->
+        <path id="corridorPath" d="M52 55 C 100 50, 140 75, 190 60" stroke="#FF6A2E" stroke-width="1.4" stroke-dasharray="3 4" opacity="0.8"/>
+        <circle r="3" fill="#FF6A2E">
+          <animateMotion dur="4.5s" repeatCount="indefinite" path="M52 55 C 100 50, 140 75, 190 60" />
+        </circle>
+        <text x="46" y="45" fill="#9298A3" font-family="IBM Plex Mono" font-size="7">CN</text>
+        <text x="205" y="30" fill="#9298A3" font-family="IBM Plex Mono" font-size="7">TW</text>
+        <text x="192" y="105" fill="#9298A3" font-family="IBM Plex Mono" font-size="7">KAOHSIUNG</text>
+      </svg>
+      <div class="corridor-coords"><span>22.6°N 120.3°E</span><span>STATUS: DELAYED</span></div>
+    </div>
+  </section>
+
+  <section class="kpi-strip reticle">
+    <div class="tick-tr"></div><div class="tick-bl"></div>
+    <div class="kpi">
+      <div class="kpi-head"><span>CRITICAL EXPOSURES</span><span class="ico">⛨</span></div>
+      <div class="kpi-value crit">1 <span class="unit">IMMEDIATE ACTION</span></div>
+      <div class="kpi-foot">SMIC 28nm MCU single-source restriction</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-head"><span>MONITORED SIGNALS</span><span class="ico">◉</span></div>
+      <div class="kpi-value">2 <span class="unit">OSINT FEEDS</span></div>
+      <div class="kpi-foot">MOFCOM export &amp; Kaohsiung freight</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-head"><span>REVENUE AT EXPOSURE</span><span class="ico">▲</span></div>
+      <div class="kpi-value">$450k <span class="unit">/ DAY</span></div>
+      <div class="kpi-foot">SMT PCB assembly line stoppage</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-head"><span>AI TRANSFORMATION</span><span class="ico">◆</span></div>
+      <div class="kpi-value">2 <span class="unit">INITIATIVES</span></div>
+      <div class="kpi-foot">Dual-sourcing &amp; dynamic AI buffers</div>
+    </div>
+  </section>
+
+  <section class="section-grid">
+    <div>
+      <div class="panel-head">
+        <div class="panel-title"><span class="sw">⛨</span>ACTIVE STRATEGIC RISK ASSESSMENTS</div>
+        <a class="panel-link" href="#">VIEW MATRIX →</a>
+      </div>
+      <div class="log">
+        <div class="log-item sev-critical">
+          <div>
+            <div class="tag-row">
+              <span class="tag critical">CRITICAL RISK — 95/100</span>
+              <span class="tag category">Geopolitical / Export Control</span>
+            </div>
+            <h3>SMIC 28nm MCU Export Restriction &amp; Production Line Stoppage</h3>
+            <p>High dependency on single-sourced SMIC 28nm automotive MCU creates critical exposure to MOFCOM export restriction, threatening SMT assembly shutdown valued at $450k/day.</p>
+          </div>
+          <div class="score-block">
+            <div class="score-label">LIKELIHOOD × IMPACT</div>
+            <div class="score-value">5/5 × 5/5</div>
+          </div>
+        </div>
+        <div class="log-item sev-medium">
+          <div>
+            <div class="tag-row">
+              <span class="tag medium">MEDIUM RISK — 36.04/100</span>
+              <span class="tag category">Supply Chain Congestion</span>
+            </div>
+            <h3>TSMC Power IC Freight Delay &amp; Buffer Depletion</h3>
+            <p>Kaohsiung port congestion is extending lead times on power-management ICs, drawing down safety stock faster than replenishment cycles allow.</p>
+          </div>
+          <div class="score-block">
+            <div class="score-label">LIKELIHOOD × IMPACT</div>
+            <div class="score-value">4/5 × 4/5</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-head">
+        <div class="panel-title"><span class="sw">◉</span>RECENT OSINT SIGNALS</div>
+        <a class="panel-link" href="#">TEST SURPRISE INPUT</a>
+      </div>
+      <div class="log">
+        <div class="log-item sev-info signal-item" style="grid-template-columns:1fr;">
+          <div>
+            <div class="tag-row">
+              <span class="tag category">Geopolitical Policy / Export Control</span>
+              <span class="date-tag" style="margin-left:auto;">2026-08-15</span>
+            </div>
+            <h3>China MOFCOM Export Control Policy on Dual-Use Legacy Chips</h3>
+            <p class="body">China imposes strict licensing requirements on export of 28nm and legacy automotive microcontroller silicon, effective immediately for Tier-1 automotive suppliers.</p>
+            <div class="signal-foot">
+              <span class="source-line">Source: Ministry of Commerce of China (MOFCOM) Official Notice</span>
+              <span class="verified">TRACEABLE</span>
+            </div>
+          </div>
+        </div>
+        <div class="log-item sev-info signal-item" style="grid-template-columns:1fr;">
+          <div>
+            <div class="tag-row">
+              <span class="tag category">Supply Chain / Logistics</span>
+              <span class="date-tag" style="margin-left:auto;">2026-08-14</span>
+            </div>
+            <h3>Kaohsiung Port Vessel Backlog Extends to 6 Days</h3>
+            <p class="body">Automated identification system data shows a growing queue of container vessels awaiting berth, correlating with delayed power-IC shipments.</p>
+            <div class="signal-foot">
+              <span class="source-line">Source: Maritime Port Bureau, AIS Feed</span>
+              <span class="verified">TRACEABLE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// live UTC readout — small technical detail, ties to "operating picture" framing
+function tick(){
+  const d = new Date();
+  const hh = String(d.getUTCHours()).padStart(2,'0');
+  const mm = String(d.getUTCMinutes()).padStart(2,'0');
+  const ss = String(d.getUTCSeconds()).padStart(2,'0');
+  document.getElementById('utcClock').innerHTML = 'UTC <b>' + hh + ':' + mm + ':' + ss + '</b>';
+}
+tick(); setInterval(tick, 1000);
+
+// wire ticker content, duplicated once for seamless loop
+const items = [
+  { sev: 'CRITICAL', text: 'SMIC 28nm MCU export restriction — production line exposure $450k/day' },
+  { sev: 'MEDIUM',   text: 'Kaohsiung freight backlog extends to 6 days, power-IC buffer depleting' },
+  { sev: 'INFO',     text: 'MOFCOM licensing notice filed 2026-08-15, effective immediately' },
+  { sev: 'INFO',     text: 'Dual-sourcing initiative — 2 alternate MCU vendors under evaluation' },
+];
+const track = document.getElementById('tickerTrack');
+function render(){
+  let html = '';
+  items.forEach(i => {
+    html += `<span class="ticker-item"><span class="sev">${i.sev}</span><span class="sep">/</span>${i.text}</span><span class="ticker-item sep">•</span>`;
+  });
+  return html;
+}
+track.innerHTML = render() + render();
+</script>
+
+</body>
+</html>

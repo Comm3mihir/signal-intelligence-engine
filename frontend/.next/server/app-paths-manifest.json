@@ -1,0 +1,8 @@
+{
+  "/page": "app/page.js",
+  "/dependency-map/page": "app/dependency-map/page.js",
+  "/transformation/page": "app/transformation/page.js",
+  "/signals/page": "app/signals/page.js",
+  "/risk-matrix/page": "app/risk-matrix/page.js",
+  "/chat/page": "app/chat/page.js"
+}
