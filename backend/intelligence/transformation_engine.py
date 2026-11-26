@@ -12,7 +12,7 @@ class TransformationEngine:
     """
     
     @classmethod
-    def generate_transformation_plan(cls, db: Session, risk_id: str) -> Dict[str, Any]:
+    def generate_transformation_plan(cls, db: Session, risk_id: str, *, commit: bool = True) -> Dict[str, Any]:
         risk = db.query(RiskAssessmentModel).filter_by(id=risk_id).first()
         if not risk:
             return {}
@@ -31,7 +31,7 @@ class TransformationEngine:
             title=opp_title,
             category="Strategic Supply Chain Resilience",
             description=opp_desc,
-            estimated_cost_reduction=18.5,
+            estimated_cost_reduction=None,
             implementation_complexity="Medium",
             priority="Immediate" if risk.risk_level == "Critical" else "High"
         )
@@ -47,7 +47,10 @@ class TransformationEngine:
             timeline_months=4
         )
         db.add(init)
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
         return {
             "opportunity": opp,

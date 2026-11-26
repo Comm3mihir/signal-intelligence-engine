@@ -15,7 +15,7 @@ class DynamicIntelligenceExtractor:
     """
 
     @classmethod
-    def extract_and_analyze(cls, db: Session, signal_id: str) -> Dict[str, Any]:
+    def extract_and_analyze(cls, db: Session, signal_id: str, *, commit: bool = True) -> Dict[str, Any]:
         signal = db.query(ExternalSignalModel).filter_by(id=signal_id).first()
         if not signal:
             raise ValueError(f"Signal {signal_id} not found")
@@ -31,14 +31,11 @@ class DynamicIntelligenceExtractor:
 
         # Check existing countries or extract mentioned
         countries = db.query(CountryModel).all()
-        matched_country = None
+        country_ids = {signal.country_id} if signal.country_id else set()
         for c in countries:
-            if c.name.lower() in content:
+            if re.search(rf"\b{re.escape(c.name.lower())}\b", content):
                 extracted_entities["mentioned_countries"].append(c.name)
-                matched_country = c
-        
-        if not matched_country and signal.country_id:
-            matched_country = db.query(CountryModel).filter_by(id=signal.country_id).first()
+                country_ids.add(c.id)
 
         # 2. Match Affected Dependencies
         # Look for matching suppliers in the affected country or component keywords in content
@@ -48,19 +45,21 @@ class DynamicIntelligenceExtractor:
             sup = db.query(SupplierModel).filter_by(id=dep.supplier_id).first()
             # If supplier is in affected country or component mentioned in text
             component_terms = [t for t in re.split(r'\W+', dep.component_name.lower()) if len(t) > 3]
-            is_country_match = (sup and matched_country and sup.country_id == matched_country.id)
-            is_term_match = any(term in content for term in component_terms)
+            sector_mentioned = re.search(r"\b(?:semiconductors?|chips?|microcontrollers?|wafers?|lithography)\b", content)
+            is_country_match = (
+                sup and sup.country_id in country_ids and sector_mentioned
+                and dep.organisation_id == "org_auratech"
+                and extracted_entities["perceived_severity"] == "High"
+            )
+            is_term_match = any(re.search(rf"\b{re.escape(term)}\b", content) for term in component_terms)
 
-            if is_country_match or is_term_match or len(deps) <= 2:
+            if is_country_match or is_term_match:
                 impacted_deps.append(dep)
-
-        if not impacted_deps and deps:
-            impacted_deps = [deps[0]]  # Fallback to primary dependency
 
         # 3. Dynamic Risk Calculation for each impacted dependency
         created_risks = []
         evidence = db.query(EvidenceSnippetModel).filter_by(signal_id=signal_id).first()
-        confidence = evidence.confidence_score if evidence else 0.85
+        confidence = evidence.confidence_score if evidence else 0.50
 
         for dep in impacted_deps:
             proc = db.query(BusinessProcessModel).filter_by(id=dep.process_id).first()
@@ -95,12 +94,15 @@ class DynamicIntelligenceExtractor:
                 evidence_confidence=confidence,
                 normalized_score=norm_score,
                 risk_level=risk_level,
-                description=f"Dynamic risk analysis triggered by '{signal.title}'. Single-source dependency on {sup.name if sup else 'supplier'} exposes process '{proc.name if proc else 'Assembly'}' to potential disruption."
+                description=f"Dynamic risk analysis triggered by '{signal.title}'. Dependency on {sup.name if sup else 'supplier'} exposes process '{proc.name if proc else 'Assembly'}' to potential disruption."
             )
             db.add(risk_obj)
             created_risks.append(risk_obj)
 
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
         return {
             "signal": signal,

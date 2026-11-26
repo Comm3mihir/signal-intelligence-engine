@@ -26,19 +26,22 @@ def ingest_dynamic_signal(req: IngestSignalRequest, db: Session = Depends(get_db
         country_name=req.country_name,
         signal_type=req.signal_type,
         source_name=req.source_name,
-        content=req.content
+        content=req.content,
+        source_url=str(req.source_url) if req.source_url else "",
+        published_date=req.published_date,
+        commit=False,
     )
     sig_obj = collected["signal"]
     evidence_obj = collected["evidence"]
 
     # 2. Dynamic Entity Extraction & Risk Generation
-    analysis = DynamicIntelligenceExtractor.extract_and_analyze(db, sig_obj.id)
+    analysis = DynamicIntelligenceExtractor.extract_and_analyze(db, sig_obj.id, commit=False)
     
     # 3. Generate Transformation Opportunities for created risks
     generated_opps = []
     generated_inits = []
     for r in analysis["risks"]:
-        plan = TransformationEngine.generate_transformation_plan(db, r.id)
+        plan = TransformationEngine.generate_transformation_plan(db, r.id, commit=False)
         if plan:
             generated_opps.append(plan["opportunity"])
             generated_inits.append(plan["initiative"])
@@ -78,7 +81,8 @@ def ingest_dynamic_signal(req: IngestSignalRequest, db: Session = Depends(get_db
         ) for d in analysis["impacted_dependencies"]
     ]
 
-    procs_db = db.query(BusinessProcessModel).all()
+    process_ids = {d.process_id for d in analysis["impacted_dependencies"] if d.process_id}
+    procs_db = db.query(BusinessProcessModel).filter(BusinessProcessModel.id.in_(process_ids)).all()
     procs_schemas = [
         BusinessProcessSchema(
             id=p.id,
@@ -86,7 +90,7 @@ def ingest_dynamic_signal(req: IngestSignalRequest, db: Session = Depends(get_db
             name=p.name,
             criticality=p.criticality,
             revenue_impact_per_day=p.revenue_impact_per_day
-        ) for p in procs_db[:2]
+        ) for p in procs_db
     ]
 
     risks_schemas = [
@@ -133,7 +137,7 @@ def ingest_dynamic_signal(req: IngestSignalRequest, db: Session = Depends(get_db
         ) for i in generated_inits
     ]
 
-    return DynamicAnalysisResponse(
+    result = DynamicAnalysisResponse(
         signal=sig_schema,
         extracted_entities=analysis["entities"],
         impacted_dependencies=deps_schemas,
@@ -143,3 +147,5 @@ def ingest_dynamic_signal(req: IngestSignalRequest, db: Session = Depends(get_db
         initiatives=inits_schemas,
         evidence_chain=[ev_schema]
     )
+    db.commit()
+    return result

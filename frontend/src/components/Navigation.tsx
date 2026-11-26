@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 
 export default function Navigation() {
   const pathname = usePathname();
-  const [backendStatus, setBackendStatus] = useState<"ONLINE" | "OFFLINE">("ONLINE");
+  const [backendStatus, setBackendStatus] = useState<"CHECKING" | "ONLINE" | "OFFLINE">("CHECKING");
   const [utcTime, setUtcTime] = useState<string>("");
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export default function Navigation() {
     const interval = setInterval(tick, 1000);
 
     // Health check
-    fetch("http://localhost:8000/")
+    fetch("/backend-health")
       .then((res) => (res.ok ? setBackendStatus("ONLINE") : setBackendStatus("OFFLINE")))
       .catch(() => setBackendStatus("OFFLINE"));
 
@@ -38,17 +38,10 @@ export default function Navigation() {
     { href: "/chat", label: "ASSISTANT" },
   ];
 
-  const tickerItems = [
-    { sev: "CRITICAL", text: "SMIC 28nm MCU export restriction — production line exposure $450k/day" },
-    { sev: "MEDIUM", text: "Kaohsiung freight backlog extends to 6 days, power-IC buffer depleting" },
-    { sev: "INFO", text: "MOFCOM licensing notice filed 2026-08-15, effective immediately" },
-    { sev: "INFO", text: "Dual-sourcing initiative — 2 alternate MCU vendors under evaluation" },
-  ];
-
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-line bg-[#0A0C10]/90 backdrop-blur-md">
-        <div className="max-w-[1320px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-[1320px] mx-auto px-4 sm:px-8 min-h-16 flex flex-wrap items-center justify-between gap-y-2 py-2">
           {/* Brand */}
           <Link href="/" className="flex items-center gap-3">
             <div className="w-[34px] h-[34px] border border-signal-dim flex items-center justify-center relative flex-shrink-0">
@@ -64,7 +57,7 @@ export default function Navigation() {
           </Link>
 
           {/* Navigation Items */}
-          <nav className="hidden md:flex items-center gap-0.5">
+          <nav className="flex order-last w-full overflow-x-auto lg:order-none lg:w-auto items-center gap-0.5">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -89,29 +82,14 @@ export default function Navigation() {
             <span className="hidden sm:inline font-mono text-[11px] text-paper-dim tracking-[0.03em]">
               UTC <b className="text-paper font-medium">{utcTime || "00:00:00"}</b>
             </span>
-            <span className="flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.05em] text-confirmed border border-confirmed/30 px-2.5 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-confirmed" />
+            <span className={`flex items-center gap-1.5 font-mono text-[10.5px] border border-line px-2.5 py-1 ${backendStatus === "ONLINE" ? "text-confirmed" : "text-caution"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
               API {backendStatus}
             </span>
           </div>
         </div>
       </header>
 
-      {/* Wire Ticker */}
-      <div className="ticker">
-        <div className="ticker-track">
-          {[...tickerItems, ...tickerItems].map((item, idx) => (
-            <span key={idx} className="font-mono text-[11px] text-paper-dim inline-flex items-center gap-2 px-5 tracking-[0.02em]">
-              <span className={`font-semibold ${item.sev === "CRITICAL" ? "text-alert" : item.sev === "MEDIUM" ? "text-caution" : "text-signal"}`}>
-                {item.sev}
-              </span>
-              <span className="text-line">/</span>
-              <span>{item.text}</span>
-              <span className="text-line ml-3">•</span>
-            </span>
-          ))}
-        </div>
-      </div>
     </>
   );
 }

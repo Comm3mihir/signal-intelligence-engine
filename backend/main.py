@@ -1,5 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
+
 import uvicorn
 import os
 import sys
@@ -9,12 +13,45 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.models.database import init_db, SessionLocal
 from data.seed.seed_data import populate_seed_data
-from backend.api import organisations, signals, risks, transformation, chat
+from backend.api import organisations, signals, risks, transformation, chat, intelligence
+from backend.research.world_intelligence import REFRESH_SECONDS, refresh
+
+
+def refresh_sources():
+    with SessionLocal() as db:
+        refresh(db)
+
+
+async def refresh_forever():
+    while True:
+        try:
+            await asyncio.to_thread(refresh_sources)
+        except Exception:
+            logging.getLogger(__name__).exception("Could not refresh public intelligence")
+        await asyncio.sleep(REFRESH_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    if os.getenv("SIGNAL_SEED_DEMO") == "1":
+        with SessionLocal() as db:
+            populate_seed_data(db)
+    worker = asyncio.create_task(refresh_forever()) if os.getenv("SIGNAL_AUTO_REFRESH", "1") == "1" else None
+    try:
+        yield
+    finally:
+        if worker:
+            worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker
+
 
 app = FastAPI(
     title="SIGNAL Strategic Intelligence & Geopolitical Risk Engine",
     description="Enterprise strategic risk analysis engine mapping external OSINT events to internal business dependencies, transparent risk scoring, evidence traceability, and AI transformation priorities.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Enable CORS for Next.js frontend
@@ -32,15 +69,7 @@ app.include_router(signals.router)
 app.include_router(risks.router)
 app.include_router(transformation.router)
 app.include_router(chat.router)
-
-@app.on_event("startup")
-def startup_event():
-    init_db()
-    db = SessionLocal()
-    try:
-        populate_seed_data(db)
-    finally:
-        db.close()
+app.include_router(intelligence.router)
 
 @app.get("/")
 def root():

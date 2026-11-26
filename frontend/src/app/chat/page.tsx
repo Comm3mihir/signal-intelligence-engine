@@ -6,13 +6,14 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([
     {
       sender: "ai",
-      text: "SIGNAL STRATEGIC ASSISTANT ONLINE. State your query regarding enterprise dependencies, geopolitical risk exposure, export control policy gazettes, or evidence traceability.",
+      text: "Ask about risks, suppliers, business processes, evidence, or mitigation proposals saved in this workspace.",
       evidence: [],
       related_risks: []
     }
   ]);
   const [inputQuery, setInputQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [requestError, setRequestError] = useState("");
 
   const exampleQuestions = [
     "What are our highest geopolitical risks?",
@@ -24,15 +25,16 @@ export default function ChatPage() {
 
   async function handleSend(queryText?: string) {
     const q = queryText || inputQuery;
-    if (!q || !q.trim()) return;
+    if (!q || !q.trim() || loading) return;
 
     const newMsgs = [...messages, { sender: "user", text: q }];
     setMessages(newMsgs);
     setInputQuery("");
+    setRequestError("");
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/api/chat/", {
+      const res = await fetch("/api/chat/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: q })
@@ -53,35 +55,8 @@ export default function ChatPage() {
       } else {
         throw new Error(`Server status ${res.status}`);
       }
-    } catch (err) {
-      console.error("Chat error:", err);
-      // Fallback RAG synthesis if backend unreachable
-      let fallbackAnswer = "Based on enterprise graph analysis and MOFCOM Notice No. 44, single-sourced SMIC 28nm automotive MCUs represent critical exposure (Risk Score: 95.0/100) threatening $450k/day SMT PCB assembly operations.";
-      if (q.toLowerCase().includes("process")) {
-        fallbackAnswer = "The business process most exposed to external events is 'Automated SMT PCB Assembly' (Revenue Impact: $450,000/day). It relies directly on single-sourced microcontrollers subject to Chinese export controls.";
-      } else if (q.toLowerCase().includes("supplier") || q.toLowerCase().includes("dependency")) {
-        fallbackAnswer = "The strategic suppliers presenting the greatest concentration dependency are SMIC Microelectronics and TSMC Foundries, supplying single-sourced 28nm MCUs and high-voltage power ICs.";
-      } else if (q.toLowerCase().includes("transformation") || q.toLowerCase().includes("initiative")) {
-        fallbackAnswer = "To reduce strategic exposure, SIGNAL recommends: 1) Nearshore dual-sourcing qualification for automotive MCUs via European/US vendors, and 2) AI predictive buffer inventory allocation in SAP.";
-      }
-
-      setMessages([
-        ...newMsgs,
-        {
-          sender: "ai",
-          text: fallbackAnswer,
-          evidence: [
-            {
-              id: "ev_fb_1",
-              signal_id: "sig_china_export_2026",
-              snippet: "Effective Sept 1, 2026, export of 28nm microcontrollers originating from mainland foundries requires MOFCOM export clearance.",
-              source_name: "Ministry of Commerce of China (MOFCOM)",
-              publication_date: "2026-08-15"
-            }
-          ],
-          related_risks: []
-        }
-      ]);
+    } catch {
+      setRequestError("Assistant unavailable. Retry when the API is reachable.");
     } finally {
       setLoading(false);
     }
@@ -92,13 +67,13 @@ export default function ChatPage() {
       {/* Header */}
       <div className="border-b border-line pb-4">
         <div className="font-mono text-[10.5px] text-signal tracking-[0.1em] uppercase mb-1">
-          STRATEGIC RAG &amp; KNOWLEDGE TRAVERSAL
+          ENTERPRISE RECORDS
         </div>
         <h1 className="font-display font-bold text-2xl text-paper">
-          Strategic AI Intelligence Assistant
+          Enterprise Records Assistant
         </h1>
         <p className="font-sans text-[13px] text-paper-dim mt-1">
-          Query enterprise exposure, scenario implications, supplier single-source risks, and verifiable OSINT evidence citations in natural language.
+          This rule-based assistant queries the AuraTech workspace. Example data is included when the demo is enabled.
         </p>
       </div>
 
@@ -155,6 +130,7 @@ export default function ChatPage() {
             </div>
           ))}
 
+          {requestError && <p role="alert" className="text-alert">{requestError}</p>}
           {loading && (
             <div className="font-mono text-[11px] text-signal animate-pulse flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-signal rounded-full animate-ping" />

@@ -1,67 +1,66 @@
+import re
+
 from sqlalchemy.orm import Session
-from typing import Dict, List, Any
+
 from backend.models.database import (
-    RiskAssessmentModel, ExternalSignalModel, EvidenceSnippetModel,
-    DependencyModel, BusinessProcessModel, SupplierModel, CountryModel
+    BusinessProcessModel, DependencyModel, EvidenceSnippetModel, RiskAssessmentModel,
+    SupplierModel, TransformationOpportunityModel,
 )
 
+
 class StrategicRAGEngine:
-    """
-    RAG & Knowledge Traversal Engine for Natural Language Q&A.
-    Combines semantic matching with structured graph context and evidence citations.
-    """
+    """Answer supported enterprise queries from records in the configured database."""
 
     @classmethod
-    def answer_query(cls, db: Session, query: str) -> Dict[str, Any]:
-        q_lower = query.lower()
+    def answer_query(cls, db: Session, query: str, organisation_id: str = "org_auratech") -> dict:
+        text = query.lower()
+        deps = db.query(DependencyModel).filter_by(organisation_id=organisation_id).all()
+        risks = (db.query(RiskAssessmentModel)
+                 .filter(RiskAssessmentModel.dependency_id.in_([dep.id for dep in deps]))
+                 .order_by(RiskAssessmentModel.normalized_score.desc()).all())
+        snippets = []
+        selected_risks = []
+        nodes = []
 
-        # Retrieve relevant evidence snippets and risks
-        all_snippets = db.query(EvidenceSnippetModel).all()
-        all_risks = db.query(RiskAssessmentModel).order_by(RiskAssessmentModel.normalized_score.desc()).all()
-        all_suppliers = db.query(SupplierModel).all()
-        all_processes = db.query(BusinessProcessModel).all()
-
-        matched_snippets = []
-        for snip in all_snippets:
-            if any(term in snip.snippet.lower() for term in q_lower.split() if len(term) > 3):
-                matched_snippets.append(snip)
-
-        if not matched_snippets:
-            matched_snippets = all_snippets[:2]
-
-        # Generate intelligent synthesized answer backed by evidence
-        if "highest" in q_lower or "geopolitical" in q_lower or "top risk" in q_lower or "critical" in q_lower:
-            top_risk = all_risks[0] if all_risks else None
-            answer = f"The highest geopolitical risk currently facing the organization is '{top_risk.risk_title if top_risk else 'SMIC 28nm MCU Export Restriction'}' with a normalized risk score of {top_risk.normalized_score if top_risk else 95.0}/100 ({top_risk.risk_level if top_risk else 'Critical'}). This stems from high single-source supplier concentration in China/Taiwan."
-
-        elif "process" in q_lower or "exposed" in q_lower:
-            proc = all_processes[0] if all_processes else None
-            answer = f"The business process most exposed to external events is '{proc.name if proc else 'Automated SMT PCB Assembly'}' (Revenue Impact: ${proc.revenue_impact_per_day if proc else 450000}/day). It relies directly on single-sourced microcontrollers subject to foreign export controls."
-
-        elif "supplier" in q_lower or "dependency" in q_lower or "concentration" in q_lower:
-            sup_names = ", ".join([s.name for s in all_suppliers[:3]])
-            answer = f"The strategic suppliers presenting the greatest concentration dependency are {sup_names}. SMIC and TSMC supply non-substitutable 28nm microcontrollers and power ICs, making operations vulnerable to Kaohsiung shipping congestion and MOFCOM export restrictions."
-
-        elif "evidence" in q_lower or "source" in q_lower:
-            evidence_text = matched_snippets[0].snippet if matched_snippets else "MOFCOM Notice No. 44 of 2026."
-            answer = f"Evidence supporting our risk assessments includes: \"{evidence_text}\" (Source: {matched_snippets[0].source_name if matched_snippets else 'Government Notice'})."
-
-        elif "transformation" in q_lower or "action" in q_lower or "reduce" in q_lower or "mitigate" in q_lower:
-            answer = "To reduce strategic exposure, SIGNAL recommends: 1) Nearshore dual-sourcing qualification for automotive MCUs via European/US vendors, 2) AI predictive buffer inventory allocation in SAP, and 3) Automating port delay lead time adjustments."
-
+        if any(term in text for term in ("evidence", "source", "citation")):
+            terms = set(re.findall(r"[a-z0-9]{3,}", text)) - {
+                "the", "show", "behind", "our", "risk", "evidence", "source", "citation",
+            }
+            matched = [risk for risk in risks
+                       if terms & set(re.findall(r"[a-z0-9]{3,}", f"{risk.risk_title} {risk.description}".lower()))]
+            selected_risks = (matched if terms else risks)[:3]
+            snippets = db.query(EvidenceSnippetModel).filter(
+                EvidenceSnippetModel.signal_id.in_([risk.signal_id for risk in selected_risks])
+            ).limit(3).all()
+            answer = ("These are the saved excerpts for the matching assessments."
+                      if snippets else "No saved evidence matches that query.")
+        elif any(term in text for term in ("transformation", "initiative", "mitigat", "reduce")):
+            opportunities = db.query(TransformationOpportunityModel).filter(
+                TransformationOpportunityModel.risk_id.in_([risk.id for risk in risks])
+            ).limit(3).all()
+            answer = ("Saved proposals: " + "; ".join(row.title for row in opportunities) + "."
+                      if opportunities else "There are no saved proposals for this organisation.")
+        elif "process" in text:
+            process_ids = list(dict.fromkeys(risk.process_id for risk in risks if risk.process_id))[:3]
+            processes = {p.id: p for p in db.query(BusinessProcessModel)
+                         .filter(BusinessProcessModel.id.in_(process_ids)).all()}
+            names = [processes[pid].name for pid in process_ids if pid in processes]
+            nodes = [{"name": name, "type": "Process"} for name in names]
+            answer = ("Processes linked to the highest saved assessments: " + ", ".join(names) + "."
+                      if names else "No assessed risks are linked to an enterprise process.")
+        elif any(term in text for term in ("supplier", "dependency", "concentration")):
+            ids = {dep.supplier_id for dep in deps if dep.dependency_type == "Single Source"}
+            suppliers = db.query(SupplierModel).filter(SupplierModel.id.in_(ids)).order_by(SupplierModel.name).all()
+            names = [supplier.name for supplier in suppliers]
+            nodes = [{"name": name, "type": "Supplier"} for name in names]
+            answer = ("Suppliers with saved single-source dependencies: " + ", ".join(names) + "."
+                      if names else "No single-source suppliers are recorded for this organisation.")
+        elif any(term in text for term in ("risk", "exposure")):
+            selected_risks = risks[:3]
+            answer = ("Highest saved risk scores: " + "; ".join(
+                f"{risk.risk_title} ({risk.normalized_score}/100)" for risk in selected_risks
+            ) + "." if selected_risks else "No risk assessments are recorded for this organisation.")
         else:
-            top_risk = all_risks[0] if all_risks else None
-            answer = f"Based on current OSINT intelligence and enterprise graph analysis, your organization's highest exposure risk is '{top_risk.risk_title if top_risk else 'Export Control & Freight Delay'}' (Risk Score: {top_risk.normalized_score if top_risk else 90.0}/100). Every conclusion is traceable to underlying regulatory filings."
+            answer = "Ask about saved risks, suppliers, business processes, evidence, or mitigation proposals."
 
-        related_nodes = [
-            {"name": s.name, "type": "Supplier"} for s in all_suppliers[:3]
-        ] + [
-            {"name": p.name, "type": "Process"} for p in all_processes[:2]
-        ]
-
-        return {
-            "answer": answer,
-            "evidence": matched_snippets[:3],
-            "related_risks": all_risks[:3],
-            "related_nodes": related_nodes
-        }
+        return {"answer": answer, "evidence": snippets, "related_risks": selected_risks, "related_nodes": nodes}

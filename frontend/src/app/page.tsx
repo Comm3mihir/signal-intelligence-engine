@@ -3,237 +3,270 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+type Article = {
+  id: string;
+  title: string;
+  publisher: string;
+  url: string;
+  excerpt: string;
+  published_at: string;
+};
+
+type Forecast = {
+  id: string;
+  event_title: string;
+  forecast: string;
+  assumption: string;
+  indicator: string;
+  invalidation: string;
+  issued_at: string;
+  deadline: string;
+  review?: { outcome: string; evidence_url: string; note: string; reviewed_at: string } | null;
+  evidence: Pick<Article, "title" | "publisher" | "url">[];
+};
+
+type Market = {
+  symbol: string;
+  name: string;
+  currency: string | null;
+  source_url: string;
+  observations: { date: string; close: number }[];
+};
+
+type Intelligence = {
+  refreshed_at: string;
+  sources: { name: string; kind: string; status: string; updated_at: string | null }[];
+  markets: Market[];
+  events: {
+    id: string;
+    articles: Article[];
+    regions: string[];
+    topics: string[];
+    forecast: Forecast | null;
+    related_events: { id: string; title: string; shared_regions: string[]; shared_topics: string[] }[];
+    market_moves: {
+      symbol: string;
+      start: string;
+      end: string;
+      change_pct: number;
+      relative_pp: number | null;
+      source_url: string;
+    }[];
+  }[];
+};
+
+const signed = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+const utc = (value: string) => `${value.slice(0, 16).replace("T", " ")} UTC`;
+
+function ForecastDetails({ scenario }: { scenario: Forecast }) {
+  return (
+    <div className="mt-4 border-l-2 border-signal pl-4">
+      <p className="mb-1 font-mono text-xs text-caution">Rule-based scenario</p>
+      <p className="font-semibold text-paper">{scenario.forecast}</p>
+      <dl className="mt-2 space-y-1 text-sm text-paper-dim">
+        <div><dt className="inline font-semibold">Assumption. </dt><dd className="inline">{scenario.assumption}</dd></div>
+        <div><dt className="inline font-semibold">What to watch. </dt><dd className="inline">{scenario.indicator}</dd></div>
+        <div><dt className="inline font-semibold">Invalidation. </dt><dd className="inline">{scenario.invalidation}</dd></div>
+      </dl>
+      <p className="mt-2 font-mono text-xs text-paper-faint">
+        Issued {utc(scenario.issued_at)} · Deadline {utc(scenario.deadline)}
+      </p>
+      {scenario.review && (
+        <div className="mt-2 text-sm text-paper-dim">
+          <p>Review · {scenario.review.outcome} · {utc(scenario.review.reviewed_at)}</p>
+          <p>{scenario.review.note}</p>
+          <a href={scenario.review.evidence_url} className="text-signal hover:underline" target="_blank" rel="noreferrer">Review evidence ↗</a>
+        </div>
+      )}
+      <ul className="mt-2 space-y-1 text-xs text-signal">
+        {scenario.evidence.map(article => (
+          <li key={article.url}>
+            <a href={article.url} target="_blank" rel="noreferrer" className="hover:underline">
+              {article.publisher} · {article.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const [risks, setRisks] = useState<any[]>([]);
-  const [signals, setSignals] = useState<any[]>([]);
+  const [data, setData] = useState<Intelligence | null>(null);
+  const [forecasts, setForecasts] = useState<Forecast[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [archiveError, setArchiveError] = useState("");
+  const [topic, setTopic] = useState("");
 
   useEffect(() => {
-    async function fetchData() {
+    const controller = new AbortController();
+    async function load() {
       try {
-        const [risksRes, signalsRes] = await Promise.all([
-          fetch("http://localhost:8000/api/risks/").then(r => r.ok ? r.json() : []),
-          fetch("http://localhost:8000/api/signals/").then(r => r.ok ? r.json() : [])
-        ]);
-        setRisks(risksRes);
-        setSignals(signalsRes);
-      } catch (err) {
-        console.error(err);
+        const res = await fetch("/api/intelligence/", { signal: controller.signal, cache: "no-store" });
+        if (!res.ok) throw new Error("Intelligence request failed");
+        setData(await res.json());
+        setError("");
+      } catch {
+        if (!controller.signal.aborted) setError("Could not reach the intelligence API. The page will retry automatically.");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
-    fetchData();
+    load();
+    const interval = setInterval(load, 60_000);
+    return () => { controller.abort(); clearInterval(interval); };
   }, []);
 
-  const criticalRisks = risks.filter(r => r.risk_level === "Critical" || r.normalized_score >= 80);
+  async function loadArchive() {
+    setArchiveError("");
+    try {
+      const res = await fetch("/api/intelligence/forecasts", { cache: "no-store" });
+      if (!res.ok) throw new Error("Forecast archive request failed");
+      setForecasts(await res.json());
+    } catch {
+      setArchiveError("Forecast archive unavailable.");
+    }
+  }
+
+  const topics = Array.from(new Set(data?.events.flatMap(event => event.topics))).sort();
+  const events = data?.events.filter(event => !topic || event.topics.includes(topic)) ?? [];
 
   return (
-    <div className="space-y-7 animate-in fade-in duration-300">
-      {/* Hero Briefing Panel */}
-      <section className="reticle border border-line bg-gradient-to-br from-signal/5 via-transparent to-panel-2 bg-panel-2 p-8 sm:p-9 grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8 items-center">
-        <div className="tick-tr" />
-        <div className="tick-bl" />
+    <div className="space-y-8">
+      <header className="border border-line bg-panel-2 p-6 sm:p-8">
+        <h1 className="font-display text-3xl font-bold text-paper">World Intelligence</h1>
+        <p className="mt-2 text-paper-dim">International reporting, daily market closes, and evidence-linked 14-day scenarios.</p>
+        <Link href="/signals" className="mt-4 inline-block text-sm text-signal hover:underline">Open enterprise signal workspace →</Link>
+      </header>
 
-        <div>
-          <div className="font-mono text-[11px] tracking-[0.14em] text-signal flex items-center gap-2 mb-4">
-            <span className="w-[22px] h-[1px] bg-signal opacity-60" />
-            STRATEGIC INTELLIGENCE OPERATING PICTURE
-          </div>
-          <h1 className="font-display font-bold text-3xl sm:text-4xl lg:text-[40px] leading-[1.08] tracking-tight max-w-[640px] text-paper">
-            AuraTech Electronics <span className="text-signal">Risk &amp; Transformation Radar</span>
-          </h1>
-          <p className="font-sans text-[14.5px] text-paper-dim leading-relaxed max-w-[560px] mt-3.5">
-            Monitoring global geopolitical events, export-restriction notices, and Taiwan Strait freight corridors — mapped directly to semiconductor PCB assembly lines and revenue streams.
-          </p>
-          <div className="flex flex-wrap gap-3 mt-6">
-            <Link href="/signals" className="btn btn-primary">
-              INGEST DYNAMIC SIGNAL
-            </Link>
-            <Link href="/chat" className="btn btn-ghost">
-              ASK AI ASSISTANT
-            </Link>
-          </div>
-        </div>
+      {loading && <p role="status" className="text-paper-dim">Fetching publishers and market sources…</p>}
+      {error && <p role="alert" className="border border-alert p-4 text-alert">{error}{data && " Showing the last loaded snapshot."}</p>}
 
-        {/* Taiwan Strait Live Corridor Trace */}
-        <div className="border-t lg:border-t-0 lg:border-l border-line pt-5 lg:pt-0 lg:pl-7 flex flex-col gap-2.5">
-          <span className="font-mono text-[9.5px] text-paper-faint tracking-[0.08em]">
-            TAIWAN STRAIT FREIGHT CORRIDOR — LIVE TRACE
-          </span>
-          <svg viewBox="0 0 260 130" fill="none" className="w-full h-auto block">
-            <path d="M0 20 L40 15 L55 40 L48 70 L20 85 L0 78 Z" fill="#1B1F27" stroke="#262B33"/>
-            <path d="M200 10 L260 5 L260 60 L230 75 L195 55 Z" fill="#1B1F27" stroke="#262B33"/>
-            <path d="M180 90 L230 85 L260 110 L260 130 L190 130 L170 110 Z" fill="#1B1F27" stroke="#262B33"/>
-            <path d="M52 55 C 100 50, 140 75, 190 60" stroke="#FF6A2E" strokeWidth="1.4" strokeDasharray="3 4" opacity="0.8"/>
-            <circle r="3" fill="#FF6A2E">
-              <animateMotion dur="4.5s" repeatCount="indefinite" path="M52 55 C 100 50, 140 75, 190 60" />
-            </circle>
-            <text x="46" y="45" fill="#9298A3" fontFamily="IBM Plex Mono" fontSize="7">CN</text>
-            <text x="205" y="30" fill="#9298A3" fontFamily="IBM Plex Mono" fontSize="7">TW</text>
-            <text x="192" y="105" fill="#9298A3" fontFamily="IBM Plex Mono" fontSize="7">KAOHSIUNG</text>
-          </svg>
-          <div className="font-mono text-[9.5px] text-paper-faint flex justify-between">
-            <span>22.6°N 120.3°E</span>
-            <span className="text-caution font-semibold">STATUS: DELAYED</span>
-          </div>
-        </div>
-      </section>
+      {data && <>
+        <section aria-label="Source status" className="border border-line bg-panel p-4">
+          <p className="font-mono text-xs text-paper-dim">Last checked {utc(data.refreshed_at)}</p>
+          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+            {data.sources.map(source => (
+              <li key={source.name} className={source.status === "ok" ? "text-confirmed" : "text-caution"}>
+                {source.name} · {source.status === "ok" ? "Available" : source.status}
+                {source.updated_at && source.status === "stale" && ` · ${utc(source.updated_at)}`}
+              </li>
+            ))}
+          </ul>
+        </section>
 
-      {/* KPI Strip */}
-      <section className="reticle border border-line bg-panel grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="tick-tr" />
-        <div className="tick-bl" />
-
-        <div className="p-[22px_26px] border-b sm:border-b-0 sm:border-r border-line">
-          <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.08em] text-paper-faint mb-3.5">
-            <span>CRITICAL EXPOSURES</span>
-            <span className="text-signal text-[12px]">⛨</span>
-          </div>
-          <div className="font-display font-semibold text-[32px] text-alert flex items-baseline gap-2 tabular-nums">
-            {criticalRisks.length || 1} <span className="font-mono text-[12px] text-paper-dim font-normal">IMMEDIATE ACTION</span>
-          </div>
-          <p className="font-mono text-[10.5px] text-paper-faint mt-2.5 tracking-[0.01em]">
-            SMIC 28nm MCU single-source restriction
-          </p>
-        </div>
-
-        <div className="p-[22px_26px] border-b sm:border-b-0 lg:border-r border-line">
-          <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.08em] text-paper-faint mb-3.5">
-            <span>MONITORED SIGNALS</span>
-            <span className="text-signal text-[12px]">◉</span>
-          </div>
-          <div className="font-display font-semibold text-[32px] text-paper flex items-baseline gap-2 tabular-nums">
-            {signals.length || 2} <span className="font-mono text-[12px] text-paper-dim font-normal">OSINT FEEDS</span>
-          </div>
-          <p className="font-mono text-[10.5px] text-paper-faint mt-2.5 tracking-[0.01em]">
-            MOFCOM export &amp; Kaohsiung freight
-          </p>
-        </div>
-
-        <div className="p-[22px_26px] border-b sm:border-b-0 sm:border-r border-line">
-          <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.08em] text-paper-faint mb-3.5">
-            <span>REVENUE AT EXPOSURE</span>
-            <span className="text-signal text-[12px]">▲</span>
-          </div>
-          <div className="font-display font-semibold text-[32px] text-paper flex items-baseline gap-2 tabular-nums">
-            $450k <span className="font-mono text-[12px] text-paper-dim font-normal">/ DAY</span>
-          </div>
-          <p className="font-mono text-[10.5px] text-paper-faint mt-2.5 tracking-[0.01em]">
-            SMT PCB assembly line stoppage
-          </p>
-        </div>
-
-        <div className="p-[22px_26px]">
-          <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.08em] text-paper-faint mb-3.5">
-            <span>AI TRANSFORMATION</span>
-            <span className="text-signal text-[12px]">◆</span>
-          </div>
-          <div className="font-display font-semibold text-[32px] text-paper flex items-baseline gap-2 tabular-nums">
-            2 <span className="font-mono text-[12px] text-paper-dim font-normal">INITIATIVES</span>
-          </div>
-          <p className="font-mono text-[10.5px] text-paper-faint mt-2.5 tracking-[0.01em]">
-            Dual-sourcing &amp; dynamic AI buffers
-          </p>
-        </div>
-      </section>
-
-      {/* Main Section Grid */}
-      <section className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-7 items-start mb-12">
-        {/* Active Strategic Risk Assessments */}
-        <div>
-          <div className="flex items-center justify-between mb-3.5">
-            <h2 className="font-display font-semibold text-[16px] text-paper flex items-center gap-2">
-              <span className="text-signal text-[13px]">⛨</span> ACTIVE STRATEGIC RISK ASSESSMENTS
-            </h2>
-            <Link href="/risk-matrix" className="font-mono text-[11px] text-signal tracking-[0.02em] hover:underline">
-              VIEW MATRIX →
-            </Link>
-          </div>
-
-          <div className="border border-line bg-panel divide-y divide-line">
-            {risks.map((risk) => {
-              const isCrit = risk.risk_level === "Critical" || risk.normalized_score >= 80;
+        <section aria-labelledby="markets-title">
+          <h2 id="markets-title" className="mb-3 font-display text-xl font-semibold text-paper">Market closes</h2>
+          {data.markets.length === 0 && <p className="text-paper-dim">Market data unavailable.</p>}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            {data.markets.map(market => {
+              const latest = market.observations[market.observations.length - 1];
+              const prior = market.observations[market.observations.length - 2];
+              const change = (latest.close / prior.close - 1) * 100;
               return (
-                <div
-                  key={risk.id}
-                  className={`p-5 relative grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-start border-l-2 ${
-                    isCrit ? "border-l-alert" : "border-l-caution"
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className={`font-mono text-[9.5px] tracking-[0.06em] px-1.5 py-0.5 border ${
-                        isCrit ? "text-alert border-alert" : "text-caution border-caution"
-                      }`}>
-                        {(risk.risk_level || "Critical").toUpperCase()} RISK — {risk.normalized_score}/100
-                      </span>
-                      <span className="font-mono text-[10.5px] text-paper-faint">
-                        {risk.risk_category}
-                      </span>
-                    </div>
-                    <h3 className="font-display font-semibold text-[15.5px] text-paper mb-1.5 leading-snug">
-                      {risk.risk_title}
-                    </h3>
-                    <p className="font-sans text-[13px] text-paper-dim leading-relaxed max-w-[52ch]">
-                      {risk.description}
-                    </p>
-                  </div>
-
-                  <div className="sm:text-right font-mono flex-shrink-0">
-                    <div className="text-[9px] text-paper-faint tracking-[0.06em] mb-1">
-                      LIKELIHOOD × IMPACT
-                    </div>
-                    <div className="text-[14px] font-semibold text-paper">
-                      {risk.likelihood}/5 × {risk.impact}/5
-                    </div>
-                  </div>
+                <div key={market.symbol} className="border border-line bg-panel p-4">
+                  <a href={market.source_url} target="_blank" rel="noreferrer" className="text-sm text-paper hover:text-signal">{market.name} ↗</a>
+                  <p className="mt-2 font-mono text-lg text-paper">
+                    {latest.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {market.currency && <span className="ml-1 text-xs text-paper-faint">{market.currency}</span>}
+                  </p>
+                  <p className={change < 0 ? "text-sm text-alert" : "text-sm text-confirmed"}>{signed(change)}%</p>
+                  <p className="mt-1 font-mono text-xs text-paper-faint">{latest.date}</p>
                 </div>
               );
             })}
           </div>
-        </div>
+        </section>
 
-        {/* Recent OSINT Signals */}
-        <div>
-          <div className="flex items-center justify-between mb-3.5">
-            <h2 className="font-display font-semibold text-[16px] text-paper flex items-center gap-2">
-              <span className="text-signal text-[13px]">◉</span> RECENT OSINT SIGNALS
-            </h2>
-            <Link href="/signals" className="font-mono text-[11px] text-signal tracking-[0.02em] hover:underline">
-              TEST SURPRISE INPUT →
-            </Link>
+        <section aria-labelledby="events-title">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="events-title" className="font-display text-xl font-semibold text-paper">International events</h2>
+            <label className="text-sm text-paper-dim">
+              Topic
+              <select value={topic} onChange={event => setTopic(event.target.value)} className="ml-2 border border-line bg-panel p-2 text-paper">
+                <option value="">All topics</option>
+                {topics.map(value => <option key={value}>{value}</option>)}
+              </select>
+            </label>
           </div>
+          {events.length === 0 && <p className="text-paper-dim">No recent articles available for this view.</p>}
+          <div className="space-y-3">
+            {events.map(event => {
+              const lead = event.articles[0];
+              const publishers = new Set(event.articles.map(article => article.publisher)).size;
+              return (
+                <article key={event.id} id={`event-${event.id}`} className="scroll-mt-28 border border-line bg-panel p-5">
+                  <p className="mb-2 font-mono text-xs text-paper-faint">
+                    {[utc(lead.published_at), ...event.regions, ...event.topics].join(" · ")}
+                  </p>
+                  <h3 className="font-display text-lg font-semibold text-paper">
+                    <a href={lead.url} target="_blank" rel="noreferrer" className="hover:text-signal">{lead.title} ↗</a>
+                  </h3>
+                  {lead.excerpt && <p className="mt-2 text-sm text-paper-dim">{lead.excerpt}</p>}
+                  <p className="mt-2 text-xs text-paper-dim">{lead.publisher} · {event.articles.length} {event.articles.length === 1 ? "report" : "reports"} from {publishers} {publishers === 1 ? "publisher" : "publishers"}</p>
+                  <Link href={`/signals?article=${lead.id}`} className="mt-2 inline-block text-xs text-signal hover:underline">Analyze enterprise exposure →</Link>
+                  {(event.articles.length > 1 || event.market_moves.length > 0 || event.forecast || event.related_events.length > 0) && (
+                    <details className="mt-3 border-t border-line pt-3 text-sm text-paper-dim">
+                      <summary className="cursor-pointer text-signal">Event evidence and analysis</summary>
+                      <ul className="mt-2 space-y-1">
+                        {event.articles.slice(1).map(article => (
+                          <li key={article.id}>
+                            <a href={article.url} target="_blank" rel="noreferrer" className="text-signal hover:underline">
+                              {article.publisher} · {article.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                      {event.related_events.length > 0 && <>
+                        <h4 className="mt-4 font-semibold text-paper">Related coverage</h4>
+                        <ul className="mt-1 space-y-1">
+                          {event.related_events.map(related => (
+                            <li key={related.id}>
+                              <a href={`#event-${related.id}`} className="text-signal hover:underline">{related.title}</a>
+                              {" · "}{[...related.shared_regions, ...related.shared_topics].join(", ")}
+                            </li>
+                          ))}
+                        </ul>
+                      </>}
+                      {event.market_moves.length > 0 && <>
+                        <h4 className="mt-4 font-semibold text-paper">Market moves around first report</h4>
+                        <ul className="mt-1 space-y-1">
+                          {event.market_moves.map(move => (
+                            <li key={move.symbol}>
+                              <a href={move.source_url} target="_blank" rel="noreferrer" className="text-signal hover:underline">{move.symbol}</a>
+                              {" "}{signed(move.change_pct)}% · {move.start} to {move.end}
+                              {move.relative_pp !== null && ` · ${signed(move.relative_pp)} pp vs. S&P 500`}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-1 text-xs text-paper-faint">The window runs from the last close before publication day to the first close after it. The figures measure timing and performance.</p>
+                      </>}
+                      {event.forecast && <ForecastDetails scenario={event.forecast} />}
+                    </details>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </>}
 
-          <div className="border border-line bg-panel divide-y divide-line">
-            {signals.map((sig) => (
-              <div key={sig.id} className="p-5 relative border-l-2 border-l-paper-faint">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-mono text-[10.5px] text-paper-faint">
-                    {sig.signal_type}
-                  </span>
-                  <span className="font-mono text-[10px] text-paper-faint">
-                    {sig.published_date}
-                  </span>
-                </div>
-                <h3 className="font-display font-semibold text-[15.5px] text-paper mb-1.5 leading-snug">
-                  {sig.title}
-                </h3>
-                <p className="font-sans text-[12.5px] text-paper-dim leading-relaxed mt-2">
-                  {sig.summary}
-                </p>
-                <div className="flex items-center justify-between mt-3 pt-2 border-t border-line-soft font-mono text-[10px]">
-                  <span className="text-paper-faint truncate max-w-[70%]">
-                    Source: {sig.source_name}
-                  </span>
-                  <span className="text-confirmed flex items-center gap-1">
-                    <span className="text-[6px]">●</span> TRACEABLE
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      <section aria-labelledby="archive-title">
+        <h2 id="archive-title" className="font-display text-xl font-semibold text-paper">Forecast archive</h2>
+        <button type="button" onClick={loadArchive} className="btn btn-ghost mt-3">Load saved forecasts</button>
+        {archiveError && <p role="alert" className="mt-3 text-alert">{archiveError}</p>}
+        {forecasts?.length === 0 && <p className="mt-3 text-paper-dim">No saved forecasts yet.</p>}
+        {!!forecasts?.length && <p className="mt-3 text-sm text-paper-dim">
+          {forecasts.filter(item => item.review?.outcome === "confirmed").length} confirmed · {forecasts.filter(item => item.review?.outcome === "refuted").length} refuted · {forecasts.filter(item => item.review?.outcome === "inconclusive").length} inconclusive · {forecasts.filter(item => !item.review).length} awaiting review
+        </p>}
+        {forecasts?.map(scenario => (
+          <details key={scenario.id} className="mt-3 border border-line bg-panel p-4">
+            <summary className="cursor-pointer text-paper">{scenario.event_title}</summary>
+            <p className="mt-2 font-mono text-xs text-paper-faint">Forecast ID {scenario.id}</p>
+            <ForecastDetails scenario={scenario} />
+          </details>
+        ))}
       </section>
     </div>
   );
