@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
+import RiskForm from "./RiskForm";
 import { useEffect, useState } from "react";
 
 export default function RiskMatrixPage() {
   const [risks, setRisks] = useState<any[]>([]);
   const [selectedRisk, setSelectedRisk] = useState<any>(null);
+  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
 
@@ -18,26 +21,30 @@ export default function RiskMatrixPage() {
       .catch(() => setUnavailable(true)).finally(() => setLoading(false));
   }, []);
 
-  if (unavailable) return <p role="alert" className="border border-alert p-4 text-alert">Risk assessments unavailable.</p>;
-
-  if (loading) return <p role="status" className="text-paper-dim">Loading…</p>;
-  if (risks.length === 0) return <p className="text-paper-dim">No risk assessments saved.</p>;
-
   return (
     <div className="space-y-7 animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="border-b border-line pb-4">
-        <div className="font-mono text-[10.5px] text-signal tracking-[0.1em] uppercase mb-1">
-          MATHEMATICAL SCORING &amp; TRACEABILITY
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-4">
+        <div>
+          <h1 className="font-display font-bold text-2xl text-paper">Risk &amp; Traceability</h1>
+          <p className="mt-1 text-sm text-paper-dim">Record how an event might affect your business, compare risk scores, and review the evidence behind each assessment.</p>
         </div>
-        <h1 className="font-display font-bold text-2xl text-paper">
-          Transparent Risk Matrix &amp; Evidence Lineage
-        </h1>
-        <p className="font-sans text-[13px] text-paper-dim mt-1">
-          Structured risk scoring formula combined with end-to-end evidence lineage from OSINT publication to enterprise impact.
-        </p>
-      </div>
+        <button type="button" aria-expanded={showForm} disabled={loading} onClick={() => setShowForm(!showForm)} className="btn btn-primary">
+          {showForm ? "Close form" : "Add risk"}
+        </button>
+      </header>
 
+      {showForm && <RiskForm onSaved={risk => {
+        setRisks(previous => [...previous, risk].sort((a, b) => b.normalized_score - a.normalized_score));
+        setSelectedRisk(risk);
+        setShowForm(false);
+      }} />}
+      {unavailable && <p role="alert" className="text-alert">Risk assessments could not be loaded.</p>}
+      {loading && <p role="status" className="text-paper-dim">Loading…</p>}
+      {!loading && !unavailable && risks.length === 0 && <p className="text-paper-dim">
+        No risk assessments yet. Use Add risk to assess a saved signal, or <Link className="text-signal underline" href="/signals">save a new signal</Link>.
+      </p>}
+
+      {risks.length > 0 && <>
       {/* Grid: 5x5 Heatmap & Risk Table */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-7 items-start">
         {/* 5x5 Heatmap */}
@@ -56,7 +63,7 @@ export default function RiskMatrixPage() {
                 return (
                   <div
                     key={`${l}-${i}`}
-                    className={`h-11 border flex items-center justify-center font-semibold transition-colors ${
+                    className={`h-11 border flex items-center justify-center font-semibold transition-colors ${selectedRisk?.likelihood === l && selectedRisk?.impact === i ? "ring-2 ring-paper " : ""}${
                       isCrit
                         ? "bg-alert/15 text-alert border-alert/30"
                         : isHigh
@@ -66,7 +73,8 @@ export default function RiskMatrixPage() {
                         : "bg-ink text-paper-faint border-line"
                     }`}
                   >
-                    {l}×{i}
+                    {l}×{i}{risks.some(risk => risk.likelihood === l && risk.impact === i) &&
+                      <span className="ml-1" title="Saved risks at this likelihood and impact">({risks.filter(risk => risk.likelihood === l && risk.impact === i).length})</span>}
                   </div>
                 );
               })
@@ -125,7 +133,7 @@ export default function RiskMatrixPage() {
               <span className="text-confirmed">●</span> EVIDENCE TRACEABILITY &amp; SOURCE VERIFICATION
             </h3>
             <span className="font-mono text-[10px] text-confirmed border border-confirmed/30 px-2 py-0.5">
-              100% TRACEABLE TO PUBLIC OSINT
+              SAVED EVIDENCE
             </span>
           </div>
 
@@ -153,6 +161,9 @@ export default function RiskMatrixPage() {
             {/* Evidence Paper Snippet */}
             <div className="space-y-3">
               <span className="font-mono text-[10px] uppercase font-bold text-paper-faint tracking-wider block">UNDERLYING OSINT SOURCE TEXT</span>
+              {selectedRisk.signal_title && <p className="text-sm text-paper-dim">Signal: {selectedRisk.signal_title}</p>}
+              {selectedRisk.source_url && <a className="inline-block text-sm text-signal underline" href={selectedRisk.source_url}
+                target="_blank" rel="noreferrer">Open submitted source ↗</a>}
               {selectedRisk.evidence_snippets && selectedRisk.evidence_snippets.length > 0 ? (
                 selectedRisk.evidence_snippets.map((ev: any) => (
                   <div key={ev.id} className="p-4 bg-ink border border-signal-dim space-y-3 font-mono text-[11px]">
@@ -165,13 +176,14 @@ export default function RiskMatrixPage() {
                 ))
               ) : (
                 <div className="p-4 bg-ink border border-line font-mono text-[11px] text-paper-dim">
-                  Traceable to MOFCOM Gazette No. 44 and Kaohsiung AIS Shipping Notices.
+                  No evidence excerpt is saved for this signal.
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

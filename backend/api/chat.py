@@ -43,6 +43,7 @@ def ask_strategic_ai(req: ChatQueryRequest, db: Session = Depends(get_db)):
     return ChatQueryResponse(
         answer=result["answer"],
         evidence=ev_schemas,
+        sources=result.get("sources", []),
         related_risks=risk_schemas,
         related_nodes=result["related_nodes"]
     )

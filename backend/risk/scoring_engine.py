@@ -1,6 +1,8 @@
 import math
 from typing import Dict, Any, Tuple
 
+MANUAL_CATEGORY = "Manual assessment"
+
 class RiskScoringEngine:
     """
     Transparent Risk Scoring Engine for SIGNAL.
