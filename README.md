@@ -26,7 +26,7 @@ npm run dev:frontend
 ```
 
 The frontend proxies requests to `http://127.0.0.1:8000` by default. Set `SIGNAL_BACKEND_URL`
-when building or starting the frontend to point at another backend. The backend defaults to
+before starting the dev server or creating a production build to use another backend. The backend defaults to
 `signal.sqlite3`. Set `DATABASE_URL=sqlite:///./signal.db` explicitly to open the legacy local database.
 Set `SIGNAL_SEED_DEMO=1` before starting the backend to enable the AuraTech example.
 
