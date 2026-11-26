@@ -37,3 +37,18 @@ def test_dynamic_surprise_record_pipeline():
     assert analysis["risks"][0].normalized_score > 0
     
     db.close()
+
+
+def test_unrelated_manual_signal_does_not_create_enterprise_risk():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as db:
+        populate_seed_data(db)
+        collected = OSINTCollector.create_signal_from_raw(
+            db, "Iceland library extends weekend hours", "Iceland", "Community",
+            "Manual audit", "A library in Reykjavik will open on Sundays.",
+        )
+        analysis = DynamicIntelligenceExtractor.extract_and_analyze(db, collected["signal"].id)
+        assert analysis["impacted_dependencies"] == []
+        assert analysis["risks"] == []
+        assert collected["signal"].source_url == ""

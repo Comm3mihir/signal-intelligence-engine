@@ -1,6 +1,7 @@
 import datetime
 import uuid
-from typing import Dict, Any, List
+from typing import Dict, Any
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from backend.models.database import ExternalSignalModel, EvidenceSnippetModel, CountryModel
 
@@ -18,18 +19,20 @@ class OSINTCollector:
         signal_type: str,
         source_name: str,
         content: str,
-        source_url: str = ""
+        source_url: str = "",
+        published_date: datetime.date | None = None,
+        *, commit: bool = True
     ) -> Dict[str, Any]:
         # Match or create country
-        country = db.query(CountryModel).filter(CountryModel.name.ilike(f"%{country_name}%")).first()
+        country = db.query(CountryModel).filter(func.lower(CountryModel.name) == country_name.lower()).first()
         if not country:
-            country_id = f"cnt_{country_name.lower().replace(' ', '_')}"
-            country = CountryModel(id=country_id, name=country_name, region="Global", risk_rating="High")
+            country_id = f"cnt_{uuid.uuid4().hex}"
+            country = CountryModel(id=country_id, name=country_name, region="Global", risk_rating="Medium")
             db.add(country)
-            db.commit()
+            db.flush()
 
         signal_id = f"sig_{uuid.uuid4().hex[:8]}"
-        pub_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        pub_date = (published_date or datetime.datetime.now(datetime.timezone.utc).date()).isoformat()
 
         signal = ExternalSignalModel(
             id=signal_id,
@@ -37,7 +40,7 @@ class OSINTCollector:
             signal_type=signal_type,
             country_id=country.id,
             source_name=source_name,
-            source_url=source_url or f"https://osint-wire.org/reports/{signal_id}",
+            source_url=source_url,
             published_date=pub_date,
             summary=content[:200] + "..." if len(content) > 200 else content,
             content=content
@@ -52,10 +55,13 @@ class OSINTCollector:
             snippet=content[:300],
             source_name=source_name,
             publication_date=pub_date,
-            confidence_score=0.90
+            confidence_score=0.50
         )
         db.add(evidence)
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
         return {
             "signal": signal,

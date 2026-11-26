@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api/chat", tags=["Strategic AI Natural Language Q&A"
 
 @router.post("/", response_model=ChatQueryResponse)
 def ask_strategic_ai(req: ChatQueryRequest, db: Session = Depends(get_db)):
-    result = StrategicRAGEngine.answer_query(db, req.query)
+    result = StrategicRAGEngine.answer_query(db, req.query, req.organisation_id or "org_auratech")
     
     ev_schemas = [
         EvidenceSnippetSchema(

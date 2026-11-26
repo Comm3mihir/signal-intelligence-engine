@@ -3,7 +3,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 import datetime
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./signal.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./signal.sqlite3")
 
 engine = create_engine(
     DATABASE_URL, 
@@ -125,3 +125,9 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+class IntelligenceRecord(Base):
+    __tablename__ = "intelligence_records"
+    id = Column(String(80), primary_key=True)
+    payload = Column(Text, nullable=False)

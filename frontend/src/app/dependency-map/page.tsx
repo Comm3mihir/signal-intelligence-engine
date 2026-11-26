@@ -8,9 +8,10 @@ export default function DependencyMapPage() {
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [filterType, setFilterType] = useState<string>("ALL");
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/organisations/org_auratech/graph")
+    fetch("/api/organisations/org_auratech/graph")
       .then((res) => (res.ok ? res.json() : Promise.reject("Fetch failed")))
       .then((data) => {
         setGraph(data);
@@ -18,32 +19,7 @@ export default function DependencyMapPage() {
           setSelectedNode(data.nodes[0]);
         }
       })
-      .catch((err) => {
-        console.error(err);
-        // Resilient fallback topology
-        const fallbackGraph = {
-          nodes: [
-            { id: "org_auratech", label: "AuraTech Electronics Pvt Ltd", type: "Organisation", data: { industry: "Electronics & Semiconductor Assembly", headquarters: "Bengaluru, India" } },
-            { id: "proc_smt", label: "Automated SMT PCB Assembly", type: "Process", data: { criticality: "Mission Critical", revenue_impact: 450000.0 } },
-            { id: "dep_microcontrollers", label: "28nm Automotive Microcontrollers (MCU)", type: "Component", data: { dependency_type: "Single Source", lead_time_weeks: 16 } },
-            { id: "sup_smic", label: "SMIC Microelectronics", type: "Supplier", data: { tier: "Tier 1", risk_level: "High" } },
-            { id: "cnt_cn", label: "China", type: "Country", data: { region: "East Asia", risk_rating: "High" } },
-            { id: "risk_smic_export_control", label: "SMIC 28nm MCU Export Restriction & Production Line Stoppage", type: "Risk", data: { score: 95.0, level: "Critical" } },
-            { id: "sig_china_export_2026", label: "China MOFCOM Export Control Policy on Dual-Use Legacy Chips", type: "Signal", data: { signal_type: "Geopolitical Policy / Export Control", published_date: "2026-08-15" } }
-          ],
-          edges: [
-            { id: "e1", source: "org_auratech", target: "proc_smt", relationship: "OWNS_PROCESS" },
-            { id: "e2", source: "dep_microcontrollers", target: "proc_smt", relationship: "REQUIRED_BY" },
-            { id: "e3", source: "sup_smic", target: "dep_microcontrollers", relationship: "SUPPLIES" },
-            { id: "e4", source: "sup_smic", target: "cnt_cn", relationship: "LOCATED_IN" },
-            { id: "e5", source: "sig_china_export_2026", target: "risk_smic_export_control", relationship: "TRIGGERS_RISK" },
-            { id: "e6", source: "risk_smic_export_control", target: "dep_microcontrollers", relationship: "THREATENS_COMPONENT" }
-          ]
-        };
-        setGraph(fallbackGraph);
-        setSelectedNode(fallbackGraph.nodes[0]);
-      })
-      .finally(() => setLoading(false));
+      .catch(() => setUnavailable(true)).finally(() => setLoading(false));
   }, []);
 
   const filteredNodes = filterType === "ALL"
@@ -60,6 +36,11 @@ export default function DependencyMapPage() {
       default: return "text-paper-dim border-line";
     }
   };
+
+  if (unavailable) return <p role="alert" className="border border-alert p-4 text-alert">Enterprise graph unavailable.</p>;
+
+  if (loading) return <p role="status" className="text-paper-dim">Loading…</p>;
+  if (graph.nodes.length === 0) return <p className="text-paper-dim">No graph available for the AuraTech workspace.</p>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">

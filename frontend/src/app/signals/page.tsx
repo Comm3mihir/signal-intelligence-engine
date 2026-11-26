@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from "react";
 
 export default function SignalsPage() {
+  const [publicationDate, setPublicationDate] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [feedError, setFeedError] = useState(false);
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -10,27 +13,46 @@ export default function SignalsPage() {
   const [dynamicResult, setDynamicResult] = useState<any>(null);
 
   // Surprise Record Test form inputs
-  const [title, setTitle] = useState("Taiwan Export Restriction on 3nm Lithography Equipment");
-  const [countryName, setCountryName] = useState("Taiwan");
+  const [title, setTitle] = useState("");
+  const [countryName, setCountryName] = useState("");
   const [signalType, setSignalType] = useState("Geopolitical Policy / Export Control");
-  const [sourceName, setSourceName] = useState("Taiwan Ministry of Economic Affairs Official Notice");
-  const [content, setContent] = useState(
-    "Emergency Policy Directive 2026-09: Taiwan imposes immediate licensing export restrictions on 3nm lithography semiconductor fabrication equipment and power IC wafers destined for non-verified foreign packaging plants."
-  );
+  const [sourceName, setSourceName] = useState("");
+  const [content, setContent] = useState("");
 
   useEffect(() => {
     fetchSignals();
+    const articleId = new URLSearchParams(window.location.search).get("article");
+    if (!articleId) return;
+    const controller = new AbortController();
+    async function loadArticle() {
+      try {
+        const response = await fetch(`/api/intelligence/articles/${encodeURIComponent(articleId!)}`,
+          { signal: controller.signal });
+        if (!response.ok) throw new Error("Article unavailable");
+        const article = await response.json();
+        setTitle(article.title.slice(0, 255));
+        setCountryName(article.regions[0] || "");
+        setSignalType(article.topics[0] || "News report");
+        setSourceName(article.publisher);
+        setSourceUrl(article.url);
+        setPublicationDate(article.published_at.slice(0, 10));
+        setContent(article.excerpt || article.title);
+      } catch {
+        if (!controller.signal.aborted) setErrorMsg("Could not load the selected article. You can enter it manually.");
+      }
+    }
+    loadArticle();
+    return () => controller.abort();
   }, []);
 
   async function fetchSignals() {
     try {
-      const res = await fetch("http://localhost:8000/api/signals/");
-      if (res.ok) {
-        const data = await res.json();
-        setSignals(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch signals:", err);
+      const res = await fetch("/api/signals/");
+      if (!res.ok) throw new Error("Signal request failed");
+      setSignals(await res.json());
+      setFeedError(false);
+    } catch {
+      setFeedError(true);
     } finally {
       setLoading(false);
     }
@@ -44,9 +66,10 @@ export default function SignalsPage() {
     
     setSubmitting(true);
     setErrorMsg(null);
+    setDynamicResult(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/signals/ingest-dynamic", {
+      const res = await fetch("/api/signals/ingest-dynamic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -54,6 +77,8 @@ export default function SignalsPage() {
           country_name: countryName,
           signal_type: signalType,
           source_name: sourceName,
+          source_url: sourceUrl || null,
+          published_date: publicationDate || null,
           content
         })
       });
@@ -66,98 +91,8 @@ export default function SignalsPage() {
         const errText = await res.text();
         setErrorMsg(`Backend Response (${res.status}): ${errText}`);
       }
-    } catch (err: any) {
-      console.error("Dynamic ingestion connection error:", err);
-      // Fallback local dynamic graph calculation if backend unreachable
-      const fallbackResult = {
-        signal: {
-          id: `sig_dyn_${Date.now()}`,
-          title: title,
-          signal_type: signalType,
-          country_id: "cnt_tw",
-          source_name: sourceName,
-          source_url: "",
-          published_date: new Date().toISOString().split("T")[0],
-          summary: content.slice(0, 180) + "...",
-          content: content
-        },
-        extracted_entities: {
-          mentioned_countries: [countryName],
-          perceived_severity: "High"
-        },
-        impacted_dependencies: [
-          {
-            id: "dep_power_ic",
-            organisation_id: "org_auratech",
-            supplier_id: "sup_tsmc",
-            process_id: "proc_smt",
-            component_name: "3nm Lithography Power Management ICs",
-            dependency_type: "Single Source",
-            substitutability: "Difficult",
-            lead_time_weeks: 16
-          }
-        ],
-        impacted_processes: [
-          {
-            id: "proc_smt",
-            organisation_id: "org_auratech",
-            name: "Automated SMT PCB Assembly",
-            criticality: "Mission Critical",
-            revenue_impact_per_day: 450000.0
-          }
-        ],
-        risks_generated: [
-          {
-            id: `risk_dyn_${Date.now()}`,
-            signal_id: `sig_dyn_${Date.now()}`,
-            dependency_id: "dep_power_ic",
-            process_id: "proc_smt",
-            risk_title: `Vulnerability: 3nm Lithography via TSMC Foundries (${countryName})`,
-            risk_category: "Geopolitical Export Restriction",
-            likelihood: 5,
-            impact: 5,
-            exposure: 5,
-            dependency_weight: 5,
-            evidence_confidence: 0.95,
-            normalized_score: 95.0,
-            risk_level: "Critical",
-            description: `Dynamic risk analysis triggered by '${title}'. Single-source dependency on TSMC exposes process 'Automated SMT PCB Assembly' to potential stoppage valued at $450k/day.`
-          }
-        ],
-        transformation_opportunities: [
-          {
-            id: `trans_dyn_${Date.now()}`,
-            risk_id: `risk_dyn_${Date.now()}`,
-            title: `Qualify Secondary European/US Vendor for ${countryName} Component Substitution`,
-            category: "Strategic Resilience & Dual Sourcing",
-            description: `Establish nearshore qualification for 3nm lithography power IC components to eliminate single-region concentration risk in ${countryName}.`,
-            estimated_cost_reduction: 22.5,
-            implementation_complexity: "Medium",
-            priority: "Immediate"
-          }
-        ],
-        initiatives: [
-          {
-            id: `init_dyn_${Date.now()}`,
-            opportunity_id: `trans_dyn_${Date.now()}`,
-            title: "Initiate Secondary Silicon Vendor Audit",
-            status: "Proposed",
-            owner: "Head of Hardware Engineering",
-            timeline_months: 3
-          }
-        ],
-        evidence_chain: [
-          {
-            id: "ev_dyn_01",
-            signal_id: `sig_dyn_${Date.now()}`,
-            snippet: content,
-            source_name: sourceName,
-            publication_date: new Date().toISOString().split("T")[0],
-            confidence_score: 0.95
-          }
-        ]
-      };
-      setDynamicResult(fallbackResult);
+    } catch {
+      setErrorMsg("Could not reach the signal API. No analysis was returned.");
     } finally {
       setSubmitting(false);
     }
@@ -165,6 +100,7 @@ export default function SignalsPage() {
 
   return (
     <div className="space-y-7 animate-in fade-in duration-300">
+
       {/* Header */}
       <div className="border-b border-line pb-4">
         <div className="font-mono text-[10.5px] text-signal tracking-[0.1em] uppercase mb-1">
@@ -178,6 +114,7 @@ export default function SignalsPage() {
         </p>
       </div>
 
+      <p className="text-sm text-paper-dim">This workspace uses manually submitted evidence and the AuraTech sample dependency graph when demo data is enabled. Scores use an unverified-source weight.</p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-7 items-start">
         {/* Dynamic Ingestion Form */}
         <div className="reticle border border-line bg-panel p-6 space-y-5">
@@ -186,10 +123,10 @@ export default function SignalsPage() {
 
           <div className="flex items-center justify-between border-b border-line pb-3">
             <h3 className="font-display font-bold text-base text-paper flex items-center gap-2">
-              <span className="text-signal">◉</span> INGEST DYNAMIC SIGNAL (SURPRISE TEST)
+              <span className="text-signal">◉</span> Analyze enterprise exposure
             </h3>
             <span className="font-mono text-[9.5px] text-signal border border-signal-dim px-2 py-0.5">
-              DYNAMIC GRAPH AI
+              RULE-BASED
             </span>
           </div>
 
@@ -240,6 +177,16 @@ export default function SignalsPage() {
               />
             </div>
 
+            <label className="block text-paper-faint font-semibold">
+              Source URL (optional)
+              <input type="url" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)}
+                className="mt-1 w-full bg-ink border border-line p-2.5 text-paper" />
+            </label>
+            <label className="block text-paper-faint font-semibold">
+              Publication date (optional)
+              <input type="date" value={publicationDate} onChange={e => setPublicationDate(e.target.value)}
+                className="mt-1 w-full bg-ink border border-line p-2.5 text-paper" />
+            </label>
             <div>
               <label className="text-paper-faint font-semibold block mb-1">SIGNAL EVENT TEXT</label>
               <textarea
@@ -253,7 +200,6 @@ export default function SignalsPage() {
 
             <button
               type="submit"
-              onClick={handleIngestDynamic}
               disabled={submitting}
               className="btn btn-primary w-full py-3 justify-center text-[12px] font-mono tracking-wider disabled:opacity-50 cursor-pointer"
             >
@@ -272,7 +218,7 @@ export default function SignalsPage() {
           </div>
 
           {errorMsg && (
-            <div className="p-3.5 bg-ink border border-alert text-alert font-mono text-[11px]">
+            <div role="alert" className="p-3.5 bg-ink border border-alert text-alert font-mono text-[11px]">
               {errorMsg}
             </div>
           )}
@@ -305,7 +251,7 @@ export default function SignalsPage() {
             <div className="space-y-4 animate-in fade-in duration-300">
               {/* Step 1: Extracted Entities */}
               <div className="p-3.5 bg-ink border border-line space-y-1 font-mono text-[10.5px]">
-                <span className="text-signal font-bold tracking-wider">1. EXTRACTED NLP ENTITIES</span>
+                <span className="text-signal font-bold tracking-wider">Matched countries and severity</span>
                 <div className="text-paper-dim flex flex-wrap gap-3">
                   <span>SEVERITY: <strong className="text-alert">{dynamicResult.extracted_entities?.perceived_severity || "High"}</strong></span>
                   <span>|</span>
@@ -313,37 +259,44 @@ export default function SignalsPage() {
                 </div>
               </div>
 
-              {/* Step 2: Risk Assessment */}
-              <div className="p-4 bg-ink border-l-2 border-l-alert border border-line space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[9.5px] text-alert border border-alert px-1.5 py-0.5">
-                    2. DYNAMIC RISK ASSESSMENT
-                  </span>
-                  <span className="font-mono text-[12px] font-bold text-alert">
-                    SCORE: {dynamicResult.risks_generated[0]?.normalized_score}/100
-                  </span>
+              {dynamicResult.risks_generated.length === 0 && (
+                <p className="text-sm text-paper-dim">Signal saved. No matching enterprise dependencies were found.</p>
+              )}
+              {dynamicResult.risks_generated.map((risk: any) => (
+                <div key={risk.id} className="p-4 bg-ink border border-line space-y-2">
+                  <p className="font-mono text-xs text-caution">Risk score {risk.normalized_score}/100</p>
+                  <h4 className="font-semibold text-paper">{risk.risk_title}</h4>
+                  <p className="text-sm text-paper-dim">{risk.description}</p>
                 </div>
-                <h4 className="font-display font-semibold text-sm text-paper">{dynamicResult.risks_generated[0]?.risk_title}</h4>
-                <p className="font-sans text-[12.5px] text-paper-dim">{dynamicResult.risks_generated[0]?.description}</p>
-              </div>
-
-              {/* Step 3: Transformation Opportunity */}
-              <div className="p-4 bg-ink border-l-2 border-l-confirmed border border-line space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[9.5px] text-confirmed border border-confirmed px-1.5 py-0.5">
-                    3. AI TRANSFORMATION STRATEGY
-                  </span>
-                  <span className="font-mono text-[11px] font-semibold text-confirmed">
-                    IMPACT: -{dynamicResult.transformation_opportunities[0]?.estimated_cost_reduction}% EXPOSURE
-                  </span>
+              ))}
+              {dynamicResult.transformation_opportunities.map((opportunity: any) => (
+                <div key={opportunity.id} className="p-4 bg-ink border border-line space-y-2">
+                  <h4 className="font-semibold text-paper">{opportunity.title}</h4>
+                  <p className="text-sm text-paper-dim">{opportunity.description}</p>
                 </div>
-                <h4 className="font-display font-semibold text-sm text-paper">{dynamicResult.transformation_opportunities[0]?.title}</h4>
-                <p className="font-sans text-[12.5px] text-paper-dim">{dynamicResult.transformation_opportunities[0]?.description}</p>
-              </div>
+              ))}
             </div>
           )}
         </div>
       </div>
+      <section className="border border-line bg-panel p-5">
+        <h2 className="font-display font-semibold text-paper">Saved signals</h2>
+        {feedError && <p role="alert" className="text-alert">Saved signals unavailable.</p>}
+        {loading && <p className="text-paper-dim">Loading…</p>}
+        {!loading && !feedError && signals.length === 0 && <p className="text-paper-dim">No saved signals.</p>}
+        <ul className="mt-3 divide-y divide-line">
+          {signals.map(signal => {
+            const demo = ["sig_china_export_2026", "sig_taiwan_strait_shipping"].includes(signal.id);
+            const hasSource = !demo && /^https?:\/\//i.test(signal.source_url || "") &&
+              !signal.source_url.startsWith("https://osint-wire.org/reports/");
+            return <li key={signal.id} className="py-3">
+              <strong className="text-paper">{signal.title}</strong>
+              <p className="text-sm text-paper-dim">{demo ? "Demo record" : signal.source_name} · {signal.published_date}</p>
+              {hasSource && <a className="text-sm text-signal" href={signal.source_url} target="_blank" rel="noreferrer">Submitted source ↗</a>}
+            </li>;
+          })}
+        </ul>
+      </section>
     </div>
   );
 }

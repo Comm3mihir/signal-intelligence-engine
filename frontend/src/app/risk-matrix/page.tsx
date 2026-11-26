@@ -6,73 +6,22 @@ export default function RiskMatrixPage() {
   const [risks, setRisks] = useState<any[]>([]);
   const [selectedRisk, setSelectedRisk] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/risks/")
+    fetch("/api/risks/")
       .then((res) => (res.ok ? res.json() : Promise.reject("Fetch failed")))
       .then((data) => {
         setRisks(data);
         if (data.length > 0) setSelectedRisk(data[0]);
       })
-      .catch((err) => {
-        console.error(err);
-        const fallbackRisks = [
-          {
-            id: "risk_smic_export_control",
-            signal_id: "sig_china_export_2026",
-            dependency_id: "dep_microcontrollers",
-            process_id: "proc_smt",
-            risk_title: "SMIC 28nm MCU Export Restriction & Production Line Stoppage",
-            risk_category: "Geopolitical / Export Control",
-            likelihood: 5,
-            impact: 5,
-            exposure: 5,
-            dependency_weight: 5,
-            evidence_confidence: 0.95,
-            normalized_score: 95.0,
-            risk_level: "Critical",
-            description: "High dependency on single-sourced SMIC 28nm Automotive MCU creates critical exposure to MOFCOM export restriction, threatening SMT assembly shutdown valued at $450k/day.",
-            evidence_snippets: [
-              {
-                id: "ev_001",
-                signal_id: "sig_china_export_2026",
-                snippet: "Effective Sept 1, 2026, export of 28nm microcontrollers originating from mainland foundries requires MOFCOM export clearance.",
-                source_name: "Ministry of Commerce of China (MOFCOM)",
-                publication_date: "2026-08-15"
-              }
-            ]
-          },
-          {
-            id: "risk_tsmc_shipping_delay",
-            signal_id: "sig_taiwan_strait_shipping",
-            dependency_id: "dep_power_ic",
-            process_id: "proc_smt",
-            risk_title: "TSMC Power IC Freight Delay & Buffer Depletion",
-            risk_category: "Supply Chain Congestion",
-            likelihood: 4,
-            impact: 4,
-            exposure: 4,
-            dependency_weight: 4,
-            evidence_confidence: 0.88,
-            normalized_score: 36.04,
-            risk_level: "Medium",
-            description: "Kaohsiung port congestion is extending lead times on power-management ICs, drawing down safety stock faster than replenishment cycles allow.",
-            evidence_snippets: [
-              {
-                id: "ev_002",
-                signal_id: "sig_taiwan_strait_shipping",
-                snippet: "Commercial operators report 10 to 14 days lead time extension for Taiwanese semiconductor shipments to South Asia.",
-                source_name: "Maritime Logistics Intelligence",
-                publication_date: "2026-08-20"
-              }
-            ]
-          }
-        ];
-        setRisks(fallbackRisks);
-        setSelectedRisk(fallbackRisks[0]);
-      })
-      .finally(() => setLoading(false));
+      .catch(() => setUnavailable(true)).finally(() => setLoading(false));
   }, []);
+
+  if (unavailable) return <p role="alert" className="border border-alert p-4 text-alert">Risk assessments unavailable.</p>;
+
+  if (loading) return <p role="status" className="text-paper-dim">Loading…</p>;
+  if (risks.length === 0) return <p className="text-paper-dim">No risk assessments saved.</p>;
 
   return (
     <div className="space-y-7 animate-in fade-in duration-300">
@@ -154,7 +103,7 @@ export default function RiskMatrixPage() {
                     <span className={`px-1.5 py-0.5 border ${isCrit ? "text-alert border-alert" : "text-caution border-caution"}`}>
                       {(risk.risk_level || "Critical").toUpperCase()} — {risk.normalized_score}/100
                     </span>
-                    <span className="text-paper-faint">{risk.risk_category}</span>
+                    <span className="text-paper-faint">{["sig_china_export_2026", "sig_taiwan_strait_shipping"].includes(risk.signal_id) ? "Demo assessment" : risk.risk_category}</span>
                   </div>
                   <h4 className="font-display font-semibold text-sm text-paper">{risk.risk_title}</h4>
                   <p className="font-sans text-[12.5px] text-paper-dim mt-1 line-clamp-2">{risk.description}</p>

@@ -6,60 +6,22 @@ export default function TransformationPage() {
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [initiatives, setInitiatives] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     Promise.all([
-      fetch("http://localhost:8000/api/transformation/opportunities").then(r => r.ok ? r.json() : Promise.reject()),
-      fetch("http://localhost:8000/api/transformation/initiatives").then(r => r.ok ? r.json() : Promise.reject())
+      fetch("/api/transformation/opportunities").then(r => r.ok ? r.json() : Promise.reject()),
+      fetch("/api/transformation/initiatives").then(r => r.ok ? r.json() : Promise.reject())
     ]).then(([oppsData, initsData]) => {
       setOpportunities(oppsData);
       setInitiatives(initsData);
-    }).catch((err) => {
-      console.error(err);
-      const fallbackOpps = [
-        {
-          id: "trans_dual_sourcing",
-          risk_id: "risk_smic_export_control",
-          title: "Qualcomm / STMicroelectronics Automotive MCU Dual-Sourcing Qualification",
-          category: "Supplier Diversification & Nearshoring",
-          description: "Qualify European or US secondary semiconductor foundries for 28nm MCUs to eliminate single-region concentration risk in East Asia.",
-          estimated_cost_reduction: 22.5,
-          implementation_complexity: "High",
-          priority: "Immediate"
-        },
-        {
-          id: "trans_ai_buffer_opt",
-          risk_id: "risk_tsmc_shipping_delay",
-          title: "AI Dynamic Safety Buffer & Predictive Freight Allocation",
-          category: "AI Supply Chain Intelligence",
-          description: "Deploy predictive inventory models to automatically adjust order lead times and safety stock levels 4 weeks in advance upon Kaohsiung port congestion alerts.",
-          estimated_cost_reduction: 14.0,
-          implementation_complexity: "Medium",
-          priority: "High"
-        }
-      ];
-      const fallbackInits = [
-        {
-          id: "init_001",
-          opportunity_id: "trans_dual_sourcing",
-          title: "Initiate Secondary MCU Validation in Bengaluru R&D Lab",
-          status: "Active",
-          owner: "Head of Hardware Engineering",
-          timeline_months: 3
-        },
-        {
-          id: "init_002",
-          opportunity_id: "trans_ai_buffer_opt",
-          title: "Integrate AI Maritime Freight Tracking API into SAP ERP",
-          status: "Planning",
-          owner: "VP of Supply Chain Operations",
-          timeline_months: 2
-        }
-      ];
-      setOpportunities(fallbackOpps);
-      setInitiatives(fallbackInits);
-    }).finally(() => setLoading(false));
+    }).catch(() => setUnavailable(true)).finally(() => setLoading(false));
   }, []);
+
+  if (unavailable) return <p role="alert" className="border border-alert p-4 text-alert">Transformation workspace unavailable.</p>;
+
+  if (loading) return <p role="status" className="text-paper-dim">Loading…</p>;
+  if (opportunities.length === 0 && initiatives.length === 0) return <p className="text-paper-dim">No transformation proposals or initiatives saved.</p>;
 
   return (
     <div className="space-y-7 animate-in fade-in duration-300">
@@ -93,7 +55,7 @@ export default function TransformationPage() {
                   {opp.category}
                 </span>
                 <span className="text-confirmed font-semibold">
-                  -{opp.estimated_cost_reduction}% EXPOSURE
+                  {opp.estimated_cost_reduction == null ? "Impact unestimated" : `Demo estimate: ${opp.estimated_cost_reduction}%`}
                 </span>
               </div>
 

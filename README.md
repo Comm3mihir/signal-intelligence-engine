@@ -5,6 +5,58 @@
 
 > An AI-powered enterprise intelligence platform that connects real-world external events and OSINT to business dependencies, processes, strategic risks and transformation priorities.
 
+## Run the live dashboard
+
+With Docker installed, run `docker compose up --build` and open http://localhost:3000.
+The API documentation is at http://localhost:8000/docs. SQLite data persists in the Compose volume.
+
+For development, run these commands from the repository root:
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt
+.venv/bin/python -m backend.main
+```
+
+In another terminal:
+
+```bash
+npm ci --prefix frontend
+npm run dev:frontend
+```
+
+The frontend proxies requests to `http://127.0.0.1:8000` by default. Set `SIGNAL_BACKEND_URL`
+before starting the dev server or creating a production build to use another backend. The backend defaults to
+`signal.sqlite3`. Set `DATABASE_URL=sqlite:///./signal.db` explicitly to open the legacy local database.
+Set `SIGNAL_SEED_DEMO=1` before starting the backend to enable the AuraTech example.
+
+### Sources and forecasting
+
+- News comes from BBC World, Al Jazeera, France 24, and DW RSS in English. SIGNAL stores headlines,
+  excerpts, dates, and publisher links from those public feeds. Full articles remain with publishers.
+- Daily indexes come from FRED (S&P 500, Nasdaq Composite, Nikkei 225). A small watchlist of US-listed
+  stocks (AAPL, NVDA, TSM ADR) uses the public Yahoo Finance chart endpoint. Access and rate limits
+  can change. Review each provider's redistribution terms before offering the data to other users.
+- The backend refreshes about every ten minutes and retains the last successful results when a source
+  fails. The dashboard shows source status and session dates. Set `SIGNAL_AUTO_REFRESH=0` to disable
+  background refresh. Dashboard requests still use the ten-minute cache and refresh it when due.
+  Run a single backend worker for this SQLite setup.
+- SIGNAL groups similar headlines by words, topic, geography, and time. Related events share a
+  topic and geography within three days. Market comparisons use the last close before publication
+  day and first close after it, with benchmark-relative moves where both dates are available.
+  These comparisons measure co-movement and timing.
+- Forecasts are conditional, rule-based 14-day scenarios for supported topics and regions. They keep
+  their original evidence, assumption, indicator, and deadline in the forecast archive. The archive
+  reports outcomes after an operator reviews an official source. Use the database configured for the
+  running backend and the forecast ID from the archive:
+
+```bash
+.venv/bin/python -m backend.review_forecast FORECAST_ID confirmed EVIDENCE_URL "What the source confirms"
+```
+
+Use `refuted` for contrary evidence or `inconclusive` after the deadline. The dashboard at
+`/api/intelligence/` returns the current snapshot. `/api/intelligence/forecasts` returns the archive.
+
 ---
 
 ## 1. Problem

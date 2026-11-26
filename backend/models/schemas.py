@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-from datetime import datetime
+from pydantic import BaseModel, Field, HttpUrl, StringConstraints
+from typing import List, Optional, Dict, Any, Annotated
+from datetime import date, datetime
 
 # Base Schemas
 class OrganisationSchema(BaseModel):
@@ -82,7 +82,7 @@ class TransformationOpportunitySchema(BaseModel):
     title: str
     category: str
     description: str
-    estimated_cost_reduction: float
+    estimated_cost_reduction: float | None
     implementation_complexity: str
     priority: str
 
@@ -96,12 +96,14 @@ class InitiativeSchema(BaseModel):
 
 # Dynamic Ingestion ("Surprise Record Test") Request / Response
 class IngestSignalRequest(BaseModel):
-    title: str
-    country_name: str
-    signal_type: str = "Geopolitical Policy / Export Control"
-    source_name: str = "Global Trade Watch"
-    published_date: Optional[str] = None
-    content: str
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    country_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    signal_type: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)] = "Geopolitical Policy / Export Control"
+    source_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)] = "Manual submission"
+    source_url: HttpUrl | None = None
+    published_date: date | None = None
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20000)]
+
 
 class DynamicAnalysisResponse(BaseModel):
     signal: ExternalSignalSchema
