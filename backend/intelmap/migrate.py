@@ -28,6 +28,11 @@ def migrate():
             ON intel_embeddings USING hnsw (vector vector_cosine_ops)
             WHERE model = 'gemini-embedding-001' AND id LIKE 'forecast:%'
         """))
+        connection.execute(text("""
+            CREATE INDEX IF NOT EXISTS intel_job_forecast_eval
+            ON intel_jobs ((payload->>'forecast_id'), ready_at DESC)
+            WHERE kind = 'verify' AND state = 'complete'
+        """))
         # The backend owns the tables. Keep Supabase's public Data API roles out.
         for table in Base.metadata.tables.values():
             name = connection.dialect.identifier_preparer.quote(table.name)

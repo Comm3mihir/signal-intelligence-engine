@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+from urllib.parse import urlsplit
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -27,6 +28,7 @@ class Provider:
     model: str
     key: str
     daily_budget: int
+    base_url: str | None = None
 
 
 def providers(task: str) -> list[Provider]:
@@ -37,18 +39,36 @@ def providers(task: str) -> list[Provider]:
         "gemini": "gemini-3.1-flash-lite",
         "openrouter": "openrouter/free",
     }
-    for name, default in defaults.items():
+    preferred = os.getenv("LLM_PROVIDER", "").strip().lower()
+    order = sorted(defaults, key=lambda name: name != preferred)
+    if preferred in {"cerebras", "compatible"}:
+        order.insert(0, preferred)
+    for name in order:
+        default = defaults.get(name, "")
+        using_shared_key = name == preferred and bool(os.getenv("LLM_API_KEY"))
         prefix = name.upper()
-        key = os.getenv(f"{prefix}_API_KEY")
-        if not key or os.getenv(f"{prefix}_FREE_TIER_CONFIRMED") != "1":
+        key = os.getenv("LLM_API_KEY") if using_shared_key else os.getenv(f"{prefix}_API_KEY")
+        free_tier = os.getenv("LLM_FREE_TIER_CONFIRMED") if using_shared_key else os.getenv(f"{prefix}_FREE_TIER_CONFIRMED")
+        if not key or free_tier != "1":
             continue
-        model = os.getenv(f"{prefix}_{'REASONING' if strong else 'FAST'}_MODEL", default)
+        default_model = os.getenv(f"{prefix}_{'REASONING' if strong else 'FAST'}_MODEL", default)
+        model = ((os.getenv("ASSISTANT_MODEL" if task == "assistant" else "FORECAST_MODEL") or
+                  os.getenv("LLM_MODEL") or default_model) if name == preferred else default_model)
+        base_url = None
+        if name in {"cerebras", "compatible"}:
+            base_url = os.getenv("LLM_BASE_URL", "https://api.cerebras.ai/v1" if name == "cerebras" else "").rstrip("/")
+            parts = urlsplit(base_url)
+            if (parts.scheme != "https" or not parts.hostname or parts.username or parts.password
+                    or parts.query or parts.fragment):
+                continue
         if name == "openrouter":
             eligible = model == "openrouter/free" or model.endswith(":free")
+        elif name in {"compatible", "cerebras"}:
+            eligible = bool(model) and bool(base_url)
         else:
             eligible = model in {defaults[name], "openai/gpt-oss-120b", "openai/gpt-oss-20b"} if name == "groq" else model == default
         if eligible and re.fullmatch(r"[a-zA-Z0-9_./:-]{1,90}", model):
-            result.append(Provider(name, model, key, int(os.getenv(f"{prefix}_DAILY_TOKEN_BUDGET", "40000"))))
+            result.append(Provider(name, model, key, int(os.getenv(f"{prefix}_DAILY_TOKEN_BUDGET", "40000")), base_url))
     return result
 
 
@@ -89,14 +109,14 @@ def request(provider: Provider, system: str, content: str, schema: dict, maximum
                 output += usage.get("thoughtsTokenCount", 0)
             return raw, usage.get("promptTokenCount"), output, data.get("modelVersion", provider.model)
 
-        host = "https://api.groq.com/openai/v1" if provider.name == "groq" else "https://openrouter.ai/api/v1"
+        host = provider.base_url or ("https://api.groq.com/openai/v1" if provider.name == "groq" else "https://openrouter.ai/api/v1")
         payload = {
             "model": provider.model, "messages": [{"role": "system", "content": system},
                                                   {"role": "user", "content": content}],
             "max_completion_tokens" if provider.name == "groq" else "max_tokens": maximum,
             "temperature": 0.2,
             "response_format": {"type": "json_schema", "json_schema": {"name": "signal_result", "schema": schema,
-                                                                       "strict": provider.name == "groq"}},
+                                                                       "strict": provider.name in {"groq", "cerebras"}}},
         }
         if provider.name == "groq":
             payload["reasoning_effort"] = "low"
@@ -125,12 +145,12 @@ def infer(task: str, instructions: str, payload: dict, contract: type[BaseModel]
     schema = contract.model_json_schema()
     content = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     system = f"{SYSTEM}\n{instructions}"
-    maximum = 4200 if task in {"prediction", "challenge"} else 1600
+    maximum = 4200 if task in {"prediction", "challenge"} else 2200 if task == "assistant" else 1600
     reservation = len((content + system + json.dumps(schema)).encode()) + maximum
     responses = []
     for fallback_rank, provider in enumerate(providers(task)):
         fingerprint = hashlib.sha256(json.dumps(
-            [task, system, content, schema, provider.name, provider.model], sort_keys=True,
+            [task, system, content, schema, provider.name, provider.model, provider.base_url], sort_keys=True,
         ).encode()).hexdigest()
         with SessionLocal() as db:
             cached = db.query(Inference).filter_by(cache_key=fingerprint, status="success").first()

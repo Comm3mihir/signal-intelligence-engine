@@ -1,9 +1,6 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-import base64
-import secrets
 import logging
 from contextlib import asynccontextmanager, suppress
 
@@ -14,13 +11,15 @@ import sys
 # Ensure root directory is on sys.path for backend package imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.models.database import init_db, SessionLocal
+from backend.models.database import engine, init_db, SessionLocal
 from data.seed.seed_data import populate_seed_data
-from backend.api import organisations, signals, risks, transformation, chat, intelligence, intelmap
+from backend.api import organisations, signals, risks, transformation, chat, intelligence, intelmap, assistant
 from backend.research.world_intelligence import REFRESH_SECONDS, refresh
 from backend.intelmap.jobs import archive_articles, process_one
 
-PRODUCTION = os.getenv("SIGNAL_ENV") == "production" or bool(os.getenv("VERCEL"))
+from backend.intelmap.access import production
+
+PRODUCTION = production()
 
 
 
@@ -54,7 +53,10 @@ async def local_jobs_forever():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not PRODUCTION:
+    if PRODUCTION and os.getenv("SIGNAL_RUN_MIGRATIONS") == "1" and engine.dialect.name == "postgresql":
+        from backend.intelmap.migrate import migrate
+        await asyncio.to_thread(migrate)
+    elif not PRODUCTION or engine.dialect.name == "sqlite":
         init_db()
     if not PRODUCTION and os.getenv("SIGNAL_SEED_DEMO") == "1":
         with SessionLocal() as db:
@@ -83,27 +85,15 @@ app = FastAPI(
 )
 
 # Enable CORS for Next.js frontend
+cors = os.getenv("SIGNAL_CORS_ORIGINS", "")
+if not cors:
+    cors = "*"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in os.getenv("SIGNAL_CORS_ORIGINS", "").split(",") if origin.strip()],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[origin.strip() for origin in cors.split(",") if origin.strip()],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
-
-@app.middleware("http")
-async def authenticate_workspace(request: Request, call_next):
-    if not PRODUCTION or request.method == "OPTIONS" or request.url.path in {"/", "/api/intelmap/workflows/tick"}:
-        return await call_next(request)
-    password = os.getenv("SIGNAL_WORKSPACE_PASSWORD", "")
-    username = os.getenv("SIGNAL_WORKSPACE_USER", "signal")
-    authorization = request.headers.get("authorization", "")
-    expected = "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()
-    if not password or not secrets.compare_digest(authorization.encode(), expected.encode()):
-        return JSONResponse({"detail": "Workspace sign-in required."}, status_code=401,
-                            headers={"WWW-Authenticate": 'Basic realm="SIGNAL"'})
-    return await call_next(request)
-
 
 # Include API Routers
 app.include_router(organisations.router)
@@ -113,6 +103,7 @@ app.include_router(transformation.router)
 app.include_router(chat.router)
 app.include_router(intelligence.router)
 app.include_router(intelmap.router)
+app.include_router(assistant.router)
 
 @app.get("/")
 def root():

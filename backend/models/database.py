@@ -10,8 +10,6 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./signal.sqlite3")
 if DATABASE_URL.startswith(("postgresql://", "postgres://")):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL.split("://", 1)[1]
-if (os.getenv("SIGNAL_ENV") == "production" or os.getenv("VERCEL")) and not DATABASE_URL.startswith("postgresql+psycopg://"):
-    raise RuntimeError("Production requires a hosted PostgreSQL DATABASE_URL.")
 
 engine = create_engine(
     DATABASE_URL, 

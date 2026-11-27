@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.models.database import get_db
+from backend.intelmap.access import production
 from backend.research.world_intelligence import FEEDS, list_forecasts, read_record, refresh
 
 
@@ -12,8 +13,10 @@ router = APIRouter(prefix="/api/intelligence", tags=["World Intelligence"])
 
 @router.get("/")
 def get_intelligence(db: Session = Depends(get_db)):
-    cloud = os.getenv("SIGNAL_ENV") == "production" or os.getenv("VERCEL")
-    snapshot = read_record(db, "snapshot", {}) if cloud else refresh(db)
+    scheduled = production() and bool(os.getenv("SIGNAL_SCHEDULER_SECRET"))
+    snapshot = read_record(db, "snapshot", {}) if scheduled else {}
+    if not snapshot:
+        snapshot = refresh(db)
     if not snapshot:
         raise HTTPException(503, detail="Waiting for the first scheduled news refresh.")
     return {

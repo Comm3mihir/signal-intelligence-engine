@@ -124,3 +124,12 @@ class Embedding(Base):
     id = Column(String(48), primary_key=True)
     model = Column(String(50), nullable=False)
     vector = Column(Vector(768).with_variant(JSON, "sqlite"), nullable=False)
+
+
+class Conversation(Base):
+    __tablename__ = "intel_conversations"
+    id = Column(String(32), primary_key=True, default=uid)
+    title = Column(String(120), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=now, nullable=False, index=True)
+    messages = Column(JSON, nullable=False)

@@ -59,10 +59,14 @@ class Draft(StrictModel):
             if item.title.casefold() in titles:
                 raise ValueError("Forecasts must describe distinct developments")
             titles.add(item.title.casefold())
-            if item.parent:
-                parent = by_id.get(item.parent)
-                if parent is None or parent.parent is not None or item.horizon_days < parent.horizon_days:
-                    raise ValueError("Second-order forecasts need a first-order parent and a compatible horizon")
+            ancestor = item
+            seen = {item.key}
+            while ancestor.parent:
+                parent = by_id.get(ancestor.parent)
+                if parent is None or parent.key in seen or len(seen) == 3 or ancestor.horizon_days < parent.horizon_days:
+                    raise ValueError("Forecast paths require valid acyclic parents, compatible horizons, and at most three scenario levels")
+                seen.add(parent.key)
+                ancestor = parent
             if set(item.support_ids) & set(item.contradict_ids):
                 raise ValueError("Citations cannot be simultaneously supporting and contradictory")
             if item.exclusive_group:

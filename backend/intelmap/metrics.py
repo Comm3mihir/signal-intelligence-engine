@@ -39,7 +39,7 @@ def evaluate(db):
     for revision in db.query(Revision).order_by(Revision.created_at):
         revisions[revision.forecast_id].append(revision)
     original, revised_24h = [], []
-    by_domain, by_model, revised_by_model = defaultdict(list), defaultdict(list), defaultdict(list)
+    by_domain, by_model, revised_by_model, by_horizon = (defaultdict(list) for _ in range(4))
     counts = {"active": 0, "confirmed": 0, "refuted": 0, "inconclusive": 0}
     for forecast in forecasts:
         resolution = resolutions.get(forecast.id)
@@ -55,6 +55,8 @@ def evaluate(db):
         row = (forecast.original["probability"], truth)
         original.append(row)
         by_domain[forecast.domain].append(row)
+        horizon = forecast.original["horizon_days"]
+        by_horizon["1–7 days" if horizon <= 7 else "8–30 days" if horizon <= 30 else "31–180 days"].append(row)
         provenance = forecast.original["provenance"]
         by_model[f'{provenance["provider"]}/{provenance["model"]}'].append(row)
         # Also cap the evaluation at the cited report date if it precedes analyst review.
@@ -80,6 +82,7 @@ def evaluate(db):
         "average_horizon_days": mean(r.original["horizon_days"] for r in forecasts) if total else None,
         "original": statistics(original), "revised_24h": statistics(revised_24h),
         "by_domain": {key: statistics(rows) for key, rows in by_domain.items()},
+        "by_horizon": {key: statistics(rows) for key, rows in by_horizon.items()},
         "by_model": {key: statistics(rows) for key, rows in by_model.items()},
         "revised_by_model": {key: statistics(rows) for key, rows in revised_by_model.items()},
         "base_rate_benchmark": None,

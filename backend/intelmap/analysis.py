@@ -30,7 +30,11 @@ def terms(value: str) -> set[str]:
 
 
 def context(article: Article) -> dict:
-    return {key: article.data[key] for key in ("id", "title", "excerpt", "publisher", "published_at", "regions", "topics")}
+    data = article.data
+    return {**{key: data[key] for key in ("id", "title", "publisher", "published_at", "regions", "topics")},
+            "excerpt": (data.get("content") or data["excerpt"])[:3800],
+            "provenance": data.get("provenance", "publisher_feed"),
+            "date_is_retrieval_time": data.get("date_is_retrieval_time", False)}
 
 
 def historical_candidates(db, source: list[dict]) -> list[dict]:
@@ -73,10 +77,14 @@ def bounded_citations(allowed_ids: set[str], result):
 def generation_step(db, payload):
     stage = payload["stage"]
     source = payload["source"]
-    allowed = {a["id"] for a in [*source, *payload["precedents"]]}
-    base = {"sources": source, "historical_context": payload["precedents"]}
+    followup = payload.get("followup", [])
+    allowed = {a["id"] for a in [*source, *payload["precedents"], *followup]}
+    base = {"sources": source, "historical_context": payload["precedents"],
+            "analysis_start": payload.get("analysis_start") or now().date().isoformat(),
+            "previous_map_id": payload.get("previous_map_id"), "followup_evidence": followup}
+    payload = {**payload, "analysis_start": base["analysis_start"]}
     if stage == "event":
-        assessment, provenance = infer("event", "Extract the reported event and uncertainty. Treat reported claims as unverified unless the supplied sources directly substantiate them.",
+        assessment, provenance = infer("event", "Extract the reported event and uncertainty. Treat reported claims as unverified unless the supplied sources directly substantiate them. User-provided or OSINT-submitted data is not independent confirmation. Distinguish retrieved dates from publication dates.",
                                        base, EventAssessment,
                                        lambda result: bounded_citations({a["id"] for a in source}, result))
         return {**payload, "stage": "prediction", "event": assessment.model_dump(), "event_provenance": provenance}
@@ -84,9 +92,9 @@ def generation_step(db, payload):
     if stage == "prediction":
         draft, provenance = infer(
             "prediction",
-            "Generate 3–5 first-order predictions with at most two consequence levels. "
+            "Generate 3–5 first-order predictions with secondary consequences and a third level only when causally justified. "
             "Include an alternative branch, distinct observable confirmation and refutation criteria, "
-            "and explicit uncertainties. First-order probabilities are marginal. Child probabilities "
+            "and explicit uncertainties. Select materially relevant diplomatic, political, security, economic or regulatory drivers rather than enumerating them all. First-order probabilities are marginal. Child probabilities "
             "are conditional on their parent. Supply a shared group only for truly mutually exclusive "
             "siblings. Consider public policy, diplomatic, or economic effects. Do not use silence as refutation.",
             base, Draft, lambda result: bounded_citations(allowed, result),
@@ -111,12 +119,19 @@ def publish_map(db, payload, draft: Draft, provenance: dict):
         return
     issued = now()
     event = {**payload["event"], "event_provenance": payload["event_provenance"],
-             "draft_provenance": payload["draft_provenance"]}
+             "draft_provenance": payload["draft_provenance"], "previous_map_id": payload.get("previous_map_id")}
     ids = [a["id"] for a in payload["source"]]
     db.add(IntelMap(id=map_id, created_at=issued, event=event, article_ids=ids))
     db.flush()
     by_key = {}
-    for pred in sorted(draft.predictions, key=lambda p: p.parent is not None):
+    by_input = {pred.key: pred for pred in draft.predictions}
+    def depth(pred):
+        level = 0
+        while pred.parent:
+            pred = by_input[pred.parent]
+            level += 1
+        return level
+    for pred in sorted(draft.predictions, key=depth):
         forecast_id = uid()
         details = pred.model_dump(exclude={"key", "parent"})
         db.add(Forecast(id=forecast_id, map_id=map_id, parent_id=by_key.get(pred.parent), issued_at=issued,

@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.intelmap.analysis import candidate_forecasts, context, fingerprint, generation_step, historical_candidates, unique_article_key, verify_article
 from backend.intelmap.embeddings import enabled, store_embedding
 from backend.intelmap.gateway import CapacityUnavailable
-from backend.intelmap.models import Article, Forecast, Job, now, uid
+from backend.intelmap.models import Article, Evidence, Forecast, Job, now, uid
 from backend.research.world_intelligence import article_date
 
 
@@ -45,9 +45,11 @@ def queue_matches(db, article):
                              payload={"article_id": article.id, "forecast_id": fid}))
 
 
-def queue_generation(db, articles: list[Article]) -> Job:
+def queue_generation(db, articles: list[Article], previous_map_id: str | None = None) -> Job:
     source = sorted((context(article) for article in articles), key=lambda a: a["id"])
-    map_id = fingerprint("intelmap:v1", [article["id"] for article in source])[:32]
+    ids = [article["id"] for article in source]
+    map_id = (fingerprint("intelmap:regenerate", previous_map_id, ids)
+              if previous_map_id else fingerprint("intelmap:v1", ids))[:32]
     key = fingerprint("generate", map_id)
     job = db.get(Job, key)
     if job:
@@ -55,8 +57,16 @@ def queue_generation(db, articles: list[Article]) -> Job:
     pending = db.query(Job).filter(Job.kind == "generate", Job.state.in_(("queued", "running"))).count()
     if pending >= 20:
         raise CapacityUnavailable("Generation queue is full. Please wait for an existing map to complete.")
+    related = []
+    if previous_map_id:
+        evidence = (db.query(Article).join(Evidence, Evidence.article_id == Article.id)
+                    .join(Forecast, Forecast.id == Evidence.forecast_id)
+                    .filter(Forecast.map_id == previous_map_id, Article.id.notin_(ids))
+                    .order_by(Article.published_at.desc()).limit(12).all())
+        related = [context(article) for article in evidence[:6]]
     add_once(db, Job(id=key, kind="generate", priority=10, payload={
-        "stage": "event", "map_id": map_id, "source": source, "precedents": historical_candidates(db, source),
+        "stage": "event", "map_id": map_id, "source": source, "previous_map_id": previous_map_id,
+        "precedents": historical_candidates(db, source), "followup": related,
     }))
     db.commit()
     return db.get(Job, key)
