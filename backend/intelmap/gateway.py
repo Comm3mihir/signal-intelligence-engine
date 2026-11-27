@@ -52,8 +52,9 @@ def providers(task: str) -> list[Provider]:
         if not key or free_tier != "1":
             continue
         default_model = os.getenv(f"{prefix}_{'REASONING' if strong else 'FAST'}_MODEL", default)
-        model = ((os.getenv("ASSISTANT_MODEL" if task == "assistant" else "FORECAST_MODEL") or
-                  os.getenv("LLM_MODEL") or default_model) if name == preferred else default_model)
+        task_model = os.getenv("ASSISTANT_MODEL") if task == "assistant" else os.getenv("FORECAST_MODEL") if strong else None
+        model = ((task_model or os.getenv("LLM_MODEL") or default_model)
+                 if name == preferred else default_model)
         base_url = None
         if name in {"cerebras", "compatible"}:
             base_url = os.getenv("LLM_BASE_URL", "https://api.cerebras.ai/v1" if name == "cerebras" else "").rstrip("/")
