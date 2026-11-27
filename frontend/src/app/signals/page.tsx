@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUrl } from "@/lib/api-url";
 import React, { useState, useEffect } from "react";
 
 export default function SignalsPage() {
@@ -26,7 +27,7 @@ export default function SignalsPage() {
     const controller = new AbortController();
     async function loadArticle() {
       try {
-        const response = await fetch(`/api/intelligence/articles/${encodeURIComponent(articleId!)}`,
+        const response = await fetch(apiUrl(`/api/intelligence/articles/${encodeURIComponent(articleId!)}`),
           { signal: controller.signal });
         if (!response.ok) throw new Error("Article unavailable");
         const article = await response.json();
@@ -47,7 +48,7 @@ export default function SignalsPage() {
 
   async function fetchSignals() {
     try {
-      const res = await fetch("/api/signals/");
+      const res = await fetch(apiUrl("/api/signals/"));
       if (!res.ok) throw new Error("Signal request failed");
       setSignals(await res.json());
       setFeedError(false);
@@ -69,7 +70,7 @@ export default function SignalsPage() {
     setDynamicResult(null);
 
     try {
-      const res = await fetch("/api/signals/ingest-dynamic", {
+      const res = await fetch(apiUrl("/api/signals/ingest-dynamic"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

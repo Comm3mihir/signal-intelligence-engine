@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUrl } from "@/lib/api-url";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -103,7 +104,7 @@ export default function Dashboard() {
     const controller = new AbortController();
     async function load() {
       try {
-        const res = await fetch("/api/intelligence/", { signal: controller.signal, cache: "no-store" });
+        const res = await fetch(apiUrl("/api/intelligence/"), { signal: controller.signal, cache: "no-store" });
         if (!res.ok) throw new Error("Intelligence request failed");
         setData(await res.json());
         setError("");
@@ -121,7 +122,7 @@ export default function Dashboard() {
   async function loadArchive() {
     setArchiveError("");
     try {
-      const res = await fetch("/api/intelligence/forecasts", { cache: "no-store" });
+      const res = await fetch(apiUrl("/api/intelligence/forecasts"), { cache: "no-store" });
       if (!res.ok) throw new Error("Forecast archive request failed");
       setForecasts(await res.json());
     } catch {
