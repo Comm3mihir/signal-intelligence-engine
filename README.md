@@ -25,8 +25,11 @@ npm ci --prefix frontend
 npm run dev:frontend
 ```
 
-The frontend proxies requests to `http://127.0.0.1:8000` by default. Set `SIGNAL_BACKEND_URL`
-before starting the dev server or creating a production build to use another backend. The backend defaults to
+In a hosted browser, the frontend uses the [SIGNAL Render API](https://signal-intelligence-engine.onrender.com)
+by default. Set `NEXT_PUBLIC_API_URL` to a different backend origin before building to override it.
+For local use, the frontend proxies requests to `http://127.0.0.1:8000` by default. Set
+`SIGNAL_BACKEND_URL` before starting the dev server or creating a local production build to
+use a different proxy target. The backend defaults to
 `signal.sqlite3`. Set `DATABASE_URL=sqlite:///./signal.db` explicitly to open the legacy local database.
 Set `SIGNAL_SEED_DEMO=1` before starting the backend to enable the AuraTech example.
 

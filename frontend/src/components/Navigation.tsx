@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUrl } from "@/lib/api-url";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -22,7 +23,7 @@ export default function Navigation() {
     const interval = setInterval(tick, 1000);
 
     // Health check
-    fetch("/backend-health")
+    fetch(apiUrl("/"))
       .then((res) => (res.ok ? setBackendStatus("ONLINE") : setBackendStatus("OFFLINE")))
       .catch(() => setBackendStatus("OFFLINE"));
 

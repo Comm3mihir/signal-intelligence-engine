@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUrl } from "@/lib/api-url";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -11,7 +12,7 @@ export default function DependencyMapPage() {
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    fetch("/api/organisations/org_auratech/graph")
+    fetch(apiUrl("/api/organisations/org_auratech/graph"))
       .then((res) => (res.ok ? res.json() : Promise.reject("Fetch failed")))
       .then((data) => {
         setGraph(data);
