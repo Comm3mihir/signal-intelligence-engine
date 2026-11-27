@@ -3,11 +3,18 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 import datetime
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./signal.sqlite3")
+if DATABASE_URL.startswith(("postgresql://", "postgres://")):
+    DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL.split("://", 1)[1]
 
 engine = create_engine(
     DATABASE_URL, 
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {"connect_timeout": 5, "prepare_threshold": None, "options": "-csearch_path=public,extensions"},
+    pool_pre_ping=True,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

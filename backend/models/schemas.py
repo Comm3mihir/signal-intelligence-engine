@@ -59,6 +59,17 @@ class EvidenceSnippetSchema(BaseModel):
     publication_date: str
     confidence_score: float = 0.85
 
+class CreateRiskRequest(BaseModel):
+    signal_id: Annotated[str, StringConstraints(min_length=1, max_length=50)]
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    likelihood: int = Field(ge=1, le=5)
+    impact: int = Field(ge=1, le=5)
+    exposure: int = Field(ge=1, le=5)
+    dependency_weight: int = Field(ge=1, le=5)
+    evidence_confidence: float = Field(ge=0.1, le=1.0)
+
+
 class RiskAssessmentSchema(BaseModel):
     id: str
     signal_id: str
@@ -75,6 +86,8 @@ class RiskAssessmentSchema(BaseModel):
     risk_level: str
     description: str
     evidence_snippets: Optional[List[EvidenceSnippetSchema]] = []
+    signal_title: str | None = None
+    source_url: str | None = None
 
 class TransformationOpportunitySchema(BaseModel):
     id: str
@@ -120,11 +133,17 @@ class ChatQueryRequest(BaseModel):
     query: str
     organisation_id: Optional[str] = "org_auratech"
 
+class ChatSource(BaseModel):
+    title: str
+    url: HttpUrl
+
+
 class ChatQueryResponse(BaseModel):
     answer: str
     evidence: List[EvidenceSnippetSchema]
     related_risks: List[RiskAssessmentSchema]
     related_nodes: List[Dict[str, str]]
+    sources: List[ChatSource] = Field(default_factory=list)
 
 # Enterprise Graph Topology Payload
 class GraphNode(BaseModel):

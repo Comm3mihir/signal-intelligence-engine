@@ -1,5 +1,6 @@
 import re
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.models.database import (
@@ -8,15 +9,27 @@ from backend.models.database import (
 )
 
 
+from backend.intelligence.world_answers import public_answer
+from backend.risk.scoring_engine import MANUAL_CATEGORY
+
+
 class StrategicRAGEngine:
     """Answer supported enterprise queries from records in the configured database."""
 
     @classmethod
     def answer_query(cls, db: Session, query: str, organisation_id: str = "org_auratech") -> dict:
         text = query.lower()
+        enterprise_query = re.search(r"\b(?:supplier|suppliers|process|processes|dependencies|dependency|initiatives?)\b", text)
+        public = None if enterprise_query else public_answer(db, query)
+        if public:
+            answer, sources = public
+            return {"answer": answer, "sources": sources, "evidence": [], "related_risks": [], "related_nodes": []}
         deps = db.query(DependencyModel).filter_by(organisation_id=organisation_id).all()
+        scope = RiskAssessmentModel.dependency_id.in_([dep.id for dep in deps])
+        if organisation_id == "org_auratech":
+            scope = or_(scope, RiskAssessmentModel.risk_category == MANUAL_CATEGORY)
         risks = (db.query(RiskAssessmentModel)
-                 .filter(RiskAssessmentModel.dependency_id.in_([dep.id for dep in deps]))
+                 .filter(scope)
                  .order_by(RiskAssessmentModel.normalized_score.desc()).all())
         snippets = []
         selected_risks = []
@@ -61,6 +74,6 @@ class StrategicRAGEngine:
                 f"{risk.risk_title} ({risk.normalized_score}/100)" for risk in selected_risks
             ) + "." if selected_risks else "No risk assessments are recorded for this organisation.")
         else:
-            answer = "Ask about saved risks, suppliers, business processes, evidence, or mitigation proposals."
+            answer = "Ask about recent news, daily market closes, published scenarios, or saved enterprise risks."
 
         return {"answer": answer, "evidence": snippets, "related_risks": selected_risks, "related_nodes": nodes}

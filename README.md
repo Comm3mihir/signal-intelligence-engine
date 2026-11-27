@@ -10,7 +10,7 @@
 With Docker installed, run `docker compose up --build` and open http://localhost:3000.
 The API documentation is at http://localhost:8000/docs. SQLite data persists in the Compose volume.
 
-For development, run these commands from the repository root:
+For development, use Python 3.11 or later and Node.js 20.9 or later. Run these commands from the repository root:
 
 ```bash
 python -m venv .venv
@@ -32,6 +32,18 @@ For local use, the frontend proxies requests to `http://127.0.0.1:8000` by defau
 use a different proxy target. The backend defaults to
 `signal.sqlite3`. Set `DATABASE_URL=sqlite:///./signal.db` explicitly to open the legacy local database.
 Set `SIGNAL_SEED_DEMO=1` before starting the backend to enable the AuraTech example.
+
+### Geopolitical workstation
+
+The primary navigation is **Overview**, **OSINT Ingestion**, **IntelMap**, and **Assistant**.
+Generate an IntelMap from a news card, saved OSINT record, external HTTPS article, or manual event.
+The Assistant uses a hosted model with conversation history and citations to matching SIGNAL records.
+Forecasts show their assumptions, evidence, model provenance, and uncertainty.
+
+The current production stack is Vercel for the frontend and Docker FastAPI on Render. See the
+[deployment guide](docs/DEPLOYMENT.md), [IntelMap specification](docs/INTELMAP_SPEC.md),
+and [provider configuration](docs/AI_PROVIDERS.md). Forecasts and conversations require hosted
+PostgreSQL in production.
 
 ### Sources and forecasting
 

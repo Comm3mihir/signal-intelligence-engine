@@ -45,3 +45,21 @@ When a new external signal or hypothetical scenario is ingested:
 3. **Deterministic Risk Scoring**: Evaluates likelihood, impact, exposure, dependency weight, and evidence confidence.
 4. **Traceable Evidence Storage**: Stores full line-by-line evidence citations.
 5. **AI Transformation Options**: Generates mitigation strategies (e.g. supplier diversification, inventory buffers, local technology substitution).
+
+## IntelMap and cloud runtime
+
+The frontend runs as a Next.js Vercel project rooted at `frontend/`. Its browser uses
+`NEXT_PUBLIC_API_URL` to reach the Render Docker FastAPI service over HTTPS. Public Overview and
+OSINT endpoints preserve the existing request shape. A shared analyst bearer token protects AI
+and conversation routes. A separate secret guards the schedule. The saved enterprise graph and
+risk routes remain available for compatibility.
+The scheduler calls a bounded HTTP function. Each invocation can refresh the source snapshot when
+it is due, archive articles, and claim one eligible job. Jobs use a persisted lease, retry schedule,
+checkpointed stages, and stable idempotency keys. PostgreSQL advisory locks serialize job claims and
+news refreshes across instances. There are no production lifespan workers.
+
+News snapshots remain in the existing intelligence store. IntelMap uses separate tables for immutable
+maps, forecast nodes, evidence, revisions, outcomes, embeddings, budgets, inference attempts, conversation history, and jobs. Forecast parent references encode causal edges. Scenario group identifiers are kept with the
+original statements. Evaluation derives scores from immutable originals, dated revisions, and verified
+outcomes on request. `python -m backend.intelmap.migrate` installs the tables and PostgreSQL history
+protection triggers. These additions do not migrate legacy SQLite data to a new cloud database.

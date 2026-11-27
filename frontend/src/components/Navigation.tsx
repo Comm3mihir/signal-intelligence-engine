@@ -32,10 +32,8 @@ export default function Navigation() {
 
   const navItems = [
     { href: "/", label: "OVERVIEW" },
-    { href: "/dependency-map", label: "ENTERPRISE GRAPH" },
     { href: "/signals", label: "OSINT INGESTION" },
-    { href: "/risk-matrix", label: "RISK & TRACEABILITY" },
-    { href: "/transformation", label: "AI TRANSFORMATION" },
+    { href: "/intelmap", label: "INTELMAP" },
     { href: "/chat", label: "ASSISTANT" },
   ];
 
