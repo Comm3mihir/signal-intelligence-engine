@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUrl } from "@/lib/api-url";
 import { useEffect, useState } from "react";
 
 export default function TransformationPage() {
@@ -10,8 +11,8 @@ export default function TransformationPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/transformation/opportunities").then(r => r.ok ? r.json() : Promise.reject()),
-      fetch("/api/transformation/initiatives").then(r => r.ok ? r.json() : Promise.reject())
+      fetch(apiUrl("/api/transformation/opportunities")).then(r => r.ok ? r.json() : Promise.reject()),
+      fetch(apiUrl("/api/transformation/initiatives")).then(r => r.ok ? r.json() : Promise.reject())
     ]).then(([oppsData, initsData]) => {
       setOpportunities(oppsData);
       setInitiatives(initsData);

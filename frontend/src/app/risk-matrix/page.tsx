@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUrl } from "@/lib/api-url";
 import { useEffect, useState } from "react";
 
 export default function RiskMatrixPage() {
@@ -9,7 +10,7 @@ export default function RiskMatrixPage() {
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    fetch("/api/risks/")
+    fetch(apiUrl("/api/risks/"))
       .then((res) => (res.ok ? res.json() : Promise.reject("Fetch failed")))
       .then((data) => {
         setRisks(data);
