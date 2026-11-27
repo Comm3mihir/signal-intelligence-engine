@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUrl } from "@/lib/api-url";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -18,7 +19,7 @@ export default function RiskForm({ onSaved }: { onSaved: (risk: any) => void }) 
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/signals/", { signal: controller.signal })
+    fetch(apiUrl("/api/signals/"), { signal: controller.signal })
       .then(response => {
         if (!response.ok) throw new Error("Signals unavailable");
         return response.json();
@@ -44,7 +45,7 @@ export default function RiskForm({ onSaved }: { onSaved: (risk: any) => void }) 
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/risks/", {
+      const response = await fetch(apiUrl("/api/risks/"), {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       if (!response.ok) {

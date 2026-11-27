@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import AnalystAccess from "@/components/AnalystAccess";
 import Assessment, { Source } from "./Assessment";
 import Graph from "./Graph";
 import { api, day, label, percent, type Article, type Catalog, type Forecast, type Infrastructure, type MapDetails, type Metrics, type Score } from "./types";
@@ -43,11 +44,16 @@ export default function IntelMapPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [waiting, setWaiting] = useState("");
+  const [signalId, setSignalId] = useState("");
+  const [inputMode, setInputMode] = useState<"articles" | "url" | "manual" | "signal">("articles");
+  const [access, setAccess] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const articleId = params.get("article");
     const initialMap = params.get("map");
+    const signal = params.get("signal");
+    if (signal) { setSignalId(signal); setInputMode("signal"); }
     if (articleId) setChecked([articleId]);
     if (initialMap) { setMapId(initialMap); setView("Explore"); }
   }, []);
@@ -65,7 +71,7 @@ export default function IntelMapPage() {
     refresh();
     const timer = setInterval(refresh, 8000);
     return () => { stopped = true; clearInterval(timer); };
-  }, []);
+  }, [access]);
 
   useEffect(() => {
     if (waiting && catalog?.maps.some(item => item.id === waiting)) {
@@ -90,7 +96,7 @@ export default function IntelMapPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, mapId]);
+  }, [view, mapId, access]);
   // Refresh data when the user enters a subview or selects a map.
   useEffect(() => {
     refreshView();
@@ -112,12 +118,12 @@ export default function IntelMapPage() {
     setView("Explore");
   }
 
-  async function generate(ids: string[]) {
+  async function generate(input: Record<string, unknown>) {
     setSaving(true);
     setError("");
     try {
       const result = await api<{ map_id: string; state: string }>("generate", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ article_ids: ids }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
       });
       if (result.state === "complete") openMap(result.map_id);
       else {
@@ -131,6 +137,25 @@ export default function IntelMapPage() {
     }
   }
 
+  function submitInput(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (inputMode === "url") generate({ article_url: form.get("url") });
+    else if (inputMode === "manual") generate({
+      manual: { title: form.get("title"), description: form.get("description") },
+    });
+  }
+
+  function updateAccess() {
+    setError("");
+    setCatalog(null);
+    setMap(null);
+    setTracked(null);
+    setMetrics(null);
+    setInfrastructure(null);
+    setAccess(value => value + 1);
+  }
+
   function pick(article: Article) {
     setChecked(previous => previous.includes(article.id)
       ? previous.filter(id => id !== article.id)
@@ -142,6 +167,7 @@ export default function IntelMapPage() {
       <h1 className="font-display text-3xl font-bold text-paper">IntelMap</h1>
       <p className="mt-1 text-paper-dim">Map future developments, track evidence, and evaluate past forecasts.</p>
     </header>
+    <AnalystAccess onChange={updateAccess} />
     <nav aria-label="IntelMap views" className="flex flex-wrap gap-2">
       {views.map(tab => <button type="button" key={tab} aria-pressed={view === tab}
         className={`btn ${tab === view ? "btn-primary" : "btn-ghost"}`} onClick={() => setView(tab)}>{tab}</button>)}
@@ -150,7 +176,28 @@ export default function IntelMapPage() {
 
     {view === "Generate" && <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
       <section className="space-y-3 border border-line bg-panel p-5">
-        <h2 className="font-display text-xl text-paper">Choose source articles</h2>
+        <h2 className="font-display text-xl text-paper">Forecast input</h2>
+        <div aria-label="Input type" className="flex flex-wrap gap-2">
+          <button type="button" aria-pressed={inputMode === "articles"} className="btn btn-ghost" onClick={() => setInputMode("articles")}>SIGNAL articles</button>
+          <button type="button" aria-pressed={inputMode === "url"} className="btn btn-ghost" onClick={() => setInputMode("url")}>Article URL</button>
+          <button type="button" aria-pressed={inputMode === "manual"} className="btn btn-ghost" onClick={() => setInputMode("manual")}>Manual event</button>
+          {signalId && <button type="button" aria-pressed={inputMode === "signal"} className="btn btn-ghost" onClick={() => setInputMode("signal")}>Saved OSINT record</button>}
+        </div>
+        {inputMode === "signal" && <>
+          <p className="text-sm text-paper-dim">The saved OSINT record will be cited as analyst-submitted evidence.</p>
+          <button className="btn btn-primary" type="button" disabled={saving} onClick={() => generate({ signal_id: signalId })}>Generate IntelMap</button>
+        </>}
+        {(inputMode === "url" || inputMode === "manual") && <form className="grid gap-3 text-sm text-paper-dim" onSubmit={submitInput}>
+          {inputMode === "url" ? <label>Public article URL
+            <input name="url" type="url" maxLength={2048} placeholder="https://" required className="mt-1 block w-full border border-line bg-ink p-2 text-paper" />
+          </label> : <>
+            <p>Manual descriptions are stored as user-provided claims.</p>
+            <label>Event title<input name="title" minLength={5} maxLength={200} required className="mt-1 block w-full border border-line bg-ink p-2 text-paper" /></label>
+            <label>Event description<textarea name="description" rows={5} minLength={30} maxLength={8000} required className="mt-1 block w-full border border-line bg-ink p-2 text-paper" /></label>
+          </>}
+          <button className="btn btn-primary justify-self-start" disabled={saving} type="submit">{saving ? "Queuing…" : "Generate IntelMap"}</button>
+        </form>}
+        {inputMode === "articles" && <>
         <p className="text-sm text-paper-dim">Select one article or up to eight related reports.</p>
         <label className="block text-sm text-paper-dim">Search headlines or publishers
           <input value={query} onChange={event => setQuery(event.target.value)} className="mt-1 w-full border border-line bg-ink p-2 text-paper" />
@@ -169,7 +216,8 @@ export default function IntelMapPage() {
           </li>)}
         </ul>
         <button type="button" className="btn btn-primary" disabled={saving || !selectedArticles.length}
-          onClick={() => generate(selectedArticles.map(article => article.id))}>{saving ? "Queuing…" : "Generate IntelMap"}</button>
+          onClick={() => generate({ article_ids: selectedArticles.map(article => article.id) })}>{saving ? "Queuing…" : "Generate IntelMap"}</button>
+        </>}
         {waiting && <p role="status" className="text-sm text-paper-dim">Request queued. The map opens when generation finishes.</p>}
       </section>
       <div className="space-y-4">
@@ -177,7 +225,7 @@ export default function IntelMapPage() {
           <h2 className="font-semibold text-paper">Related reports</h2>
           {catalog?.events.filter(event => event.articles.length > 1).slice(0, 8).map(event =>
             <button key={event.id} className="block text-left text-sm text-signal hover:underline" type="button"
-              onClick={() => setChecked(event.articles.slice(0, 8).map(article => article.id))}>
+              onClick={() => { setInputMode("articles"); setChecked(event.articles.slice(0, 8).map(article => article.id)); }}>
               {event.articles[0].title} · {event.articles.length} reports
             </button>)}
           {catalog && !catalog.events.some(event => event.articles.length > 1) && <p className="text-sm text-paper-dim">No multi-source clusters currently collected.</p>}
@@ -200,6 +248,12 @@ export default function IntelMapPage() {
           {catalog?.maps.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
       </label>
+      {map?.id === mapId && <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-ghost" disabled={saving || Boolean(waiting)} onClick={() => generate({ previous_map_id: map.id })}>Regenerate as new version</button>
+        {map.previous_map_id && <button type="button" className="btn btn-ghost" onClick={() => openMap(map.previous_map_id)}>Previous version</button>}
+        {map.next_map_ids.map((id, index) => <button key={id} type="button" className="btn btn-ghost" onClick={() => openMap(id)}>Next version{map.next_map_ids.length > 1 ? ` ${index + 1}` : ""}</button>)}
+        {waiting && <p role="status" className="text-sm text-paper-dim">New version queued.</p>}
+      </div>}
       {map?.id === mapId && <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <Graph map={map} selected={selected} onSelect={setSelected} />
         <Assessment key={selected} map={map} forecast={map.forecasts.find(item => item.id === selected)}
@@ -213,14 +267,14 @@ export default function IntelMapPage() {
       <label className="text-sm text-paper-dim">Status
         <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="ml-2 bg-ink p-2">
           <option value="">All</option>
-          {Array.from(new Set((tracked || []).map(row => row.status))).map(status => <option key={status} value={status}>{label(status)}</option>)}
+          {Array.from(new Set((tracked || []).map(row => row.verification_state))).map(status => <option key={status} value={status}>{label(status)}</option>)}
         </select>
       </label>
       {tracked?.length === 0 && <p className="text-paper-dim">No forecasts published yet.</p>}
-      {tracked?.filter(item => !statusFilter || item.status === statusFilter).map(item =>
+      {tracked?.filter(item => !statusFilter || item.verification_state === statusFilter).map(item =>
         <article key={item.id} className="space-y-1 border-t border-line pt-3 text-sm text-paper-dim">
           <button type="button" className="text-left font-semibold text-signal hover:underline" onClick={() => openMap(item.map_id, item.id)}>{item.original.title}</button>
-          <p>{percent(item.probability)} · {label(item.status)} · Deadline {day(item.deadline)} · {item.evidence.length} evidence records</p>
+          <p>{percent(item.probability)} · {label(item.verification_state)} · Deadline {day(item.deadline)} · {item.evidence.length} evidence records</p>
           {item.revisions[0] && <p>Revised {day(item.revisions[0].at)} · {item.revisions[0].rationale}</p>}
           {item.evidence[0] && <Source article={item.evidence[0].article} />}
         </article>)}
@@ -237,6 +291,7 @@ export default function IntelMapPage() {
         <Performance title="Original forecasts" score={metrics.original} />
         <Performance title="Revisions at least 24 hours before outcome" score={metrics.revised_24h} />
         {Object.entries(metrics.by_domain).map(([key, score]) => <Performance key={key} title={`Domain · ${key}`} score={score} />)}
+        {Object.entries(metrics.by_horizon).map(([key, score]) => <Performance key={key} title={`Horizon · ${key}`} score={score} />)}
         {Object.entries(metrics.by_model).map(([key, score]) => <Performance key={key} title={`Original model · ${key}`} score={score} />)}
         {Object.entries(metrics.revised_by_model).map(([key, score]) => <Performance key={key} title={`Revision model · ${key}`} score={score} />)}
       </div>

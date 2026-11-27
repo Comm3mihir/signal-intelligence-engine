@@ -16,6 +16,7 @@ export default function Graph({ map, selected, onSelect }: {
   const [expanded, setExpanded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [filter, setFilter] = useState("");
+  const [collapsed, setCollapsed] = useState<string[]>([]);
   const { nodes, edges } = useMemo(() => {
     const graph = new dagre.graphlib.Graph().setGraph({ rankdir: "LR", nodesep: 30, ranksep: 70 });
     graph.setDefaultEdgeLabel(() => ({}));
@@ -35,13 +36,30 @@ export default function Graph({ map, selected, onSelect }: {
       }
     }
     add("event", map.event.title, "Reported development", undefined, "#ff6a2e");
+    const byId = new Map(map.forecasts.map(item => [item.id, item]));
+    const visible = new Set<string>();
     for (const forecast of map.forecasts) {
-      if (filter && forecast.status !== filter && !map.forecasts.some(child => child.parent_id === forecast.id && child.status === filter)) continue;
+      if (filter && forecast.verification_state !== filter) continue;
+      let branch: string | null = forecast.id;
+      while (branch) {
+        visible.add(branch);
+        branch = byId.get(branch)?.parent_id || null;
+      }
+    }
+    for (const forecast of map.forecasts) {
+      if (!visible.has(forecast.id)) continue;
+      let parent = forecast.parent_id;
+      let hidden = false;
+      while (parent) {
+        if (collapsed.includes(parent)) { hidden = true; break; }
+        parent = byId.get(parent)?.parent_id || null;
+      }
+      if (hidden) continue;
       const { original, status, revisions, evidence } = forecast;
       const color = status === "confirmed" ? "#36c991" : status === "refuted" ? "#f76162"
         : original.scenario === "alternative" ? "#dbab58" : "#626b7b";
       add(forecast.id, original.title,
-        `${percent(forecast.probability)} · ${day(forecast.deadline)} · ${original.domain} · ${label(status)} · ${evidence.length} sources${revisions.length ? ` · rev. ${day(revisions[0].at)}` : ""}`,
+        `${percent(forecast.probability)} · ${day(forecast.deadline)} · ${original.domain} · ${label(forecast.verification_state)} · ${evidence.length} sources${revisions.length ? ` · rev. ${day(revisions[0].at)}` : ""}`,
         forecast.parent_id || "event", color);
       if (expanded && selected === forecast.id) {
         for (const item of evidence) {
@@ -57,7 +75,7 @@ export default function Graph({ map, selected, onSelect }: {
       if (node.id === selected) node.style = { ...node.style, boxShadow: "0 0 0 2px #ff6a2e" };
     }
     return { nodes, edges };
-  }, [map, filter, expanded, selected]);
+  }, [map, filter, expanded, selected, collapsed]);
 
   async function toggleFullscreen() {
     if (document.fullscreenElement === container.current) await document.exitFullscreen();
@@ -70,10 +88,14 @@ export default function Graph({ map, selected, onSelect }: {
       <label className="text-sm text-paper-dim">Status
         <select value={filter} onChange={event => setFilter(event.target.value)} className="ml-2 bg-ink p-1 text-paper">
           <option value="">All</option>
-          {Array.from(new Set(map.forecasts.map(item => item.status))).map(status =>
+          {Array.from(new Set(map.forecasts.map(item => item.verification_state))).map(status =>
             <option key={status} value={status}>{label(status)}</option>)}
         </select>
       </label>
+      <button type="button" className="btn btn-ghost" disabled={!map.forecasts.some(item => item.parent_id === selected)}
+        onClick={() => setCollapsed(items => items.includes(selected) ? items.filter(id => id !== selected) : [...items, selected])}>
+        {collapsed.includes(selected) ? "Expand branch" : "Collapse branch"}
+      </button>
       <button className="btn btn-ghost" aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>Evidence nodes</button>
       <button className="btn btn-ghost" onClick={() => toggleFullscreen().catch(() => setFullscreen(value => !value))}>Toggle fullscreen</button>
     </div>

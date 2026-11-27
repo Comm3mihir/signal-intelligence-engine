@@ -2,8 +2,8 @@
 
 Each original statement contains a deadline and predicates for confirmation and refutation.
 Initial probabilities are explicitly uncalibrated estimates. First-order probabilities estimate
-the chance of the event within its window. A second-order estimate is conditional on its parent.
-The product of parent marginal and child conditional estimates gives the displayed joint pathway.
+the chance of the event within its window. A downstream estimate is conditional on its parent.
+The product of the root marginal and every conditional estimate along the branch gives the displayed joint pathway.
 Exclusive siblings cannot initially exceed a total of one. Other forecasts may overlap.
 
 The matching weights default to 30% semantic, 25% actor/entity, 25% action, 10% temporal and 10%

@@ -4,9 +4,11 @@ import { useState, type FormEvent } from "react";
 import { api, day, label, percent, type Article, type Forecast, type MapDetails } from "./types";
 
 export function Source({ article }: { article: Article }) {
-  return <a target="_blank" rel="noreferrer" className="text-signal hover:underline" href={article.url}>
-    {article.title} · {article.publisher} · {day(article.published_at)} {article.provenance === "analyst_submitted" && "· Analyst-submitted"} ↗
-  </a>;
+  const provenance = article.provenance ? ` · ${label(article.provenance)}` : "";
+  const detail = `${article.title} · ${article.publisher} · ${article.date_is_retrieval_time ? "Retrieved " : ""}${day(article.published_at)}${provenance}`;
+  return article.url && /^https?:\/\//i.test(article.url) ?
+    <a target="_blank" rel="noreferrer" className="text-signal hover:underline" href={article.url}>{detail} ↗</a> :
+    <span className="text-paper-dim">{detail}</span>;
 }
 
 function List({ title, items }: { title: string; items: string[] }) {
@@ -96,7 +98,8 @@ export default function Assessment({ map, forecast, history, onReview }: {
     <h2 className="font-display text-lg text-paper">{initial.title}</h2>
     <p className="text-caution">{percent(item.probability)} · {item.parent_id ? "Conditional on parent" : "Marginal"} · Uncalibrated model estimate</p>
     {item.joint_probability !== null && <p>Joint pathway estimate {percent(item.joint_probability)}</p>}
-    <p>{label(item.status)} · {initial.domain} · Deadline {day(item.deadline)} UTC</p>
+    <p>{label(item.verification_state)} · {initial.domain} · Deadline {day(item.deadline)} UTC</p>
+    {item.last_evaluated_at && <p>Last evaluated {day(item.last_evaluated_at)} UTC</p>}
     <p>Issued {day(item.issued_at)} · {initial.provenance.provider} / {initial.provenance.model}</p>
     <section><h3 className="font-semibold text-paper">Causal reasoning</h3><p>{initial.reasoning}</p></section>
     <List title="Actors" items={map.event.actors} />
@@ -116,7 +119,7 @@ export default function Assessment({ map, forecast, history, onReview }: {
         <p>{revision.rationale}</p></div>)}
       <p>Original estimate {percent(initial.probability)} · {day(item.issued_at)}</p>
     </section>
-    {!item.resolution && item.status !== "expired_inconclusive" && item.evidence.length > 0 && <>
+    {!item.resolution && item.verification_state !== "expired" && item.evidence.length > 0 && <>
       <button className="btn btn-ghost" type="button" onClick={() => setRevising(value => !value)}>
         {revising ? "Close probability review" : "Record Bayesian revision"}
       </button>

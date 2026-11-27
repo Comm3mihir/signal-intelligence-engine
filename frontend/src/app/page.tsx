@@ -208,7 +208,7 @@ export default function Dashboard() {
                   <p className="mt-2 text-xs text-paper-dim">{lead.publisher} · {event.articles.length} {event.articles.length === 1 ? "report" : "reports"} from {publishers} {publishers === 1 ? "publisher" : "publishers"}</p>
                   <div className="mt-2 flex flex-wrap gap-4 text-xs text-signal">
                     <Link href={`/intelmap?article=${lead.id}`} className="hover:underline">Generate IntelMap →</Link>
-                    <Link href={`/signals?article=${lead.id}`} className="hover:underline">Analyze enterprise exposure →</Link>
+                    <Link href={`/signals?article=${lead.id}`} className="hover:underline">Open OSINT record →</Link>
                   </div>
                   {(event.articles.length > 1 || event.market_moves.length > 0 || event.forecast || event.related_events.length > 0) && (
                     <details className="mt-3 border-t border-line pt-3 text-sm text-paper-dim">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { apiUrl } from "@/lib/api-url";
 import React, { useState, useEffect } from "react";
 
@@ -105,17 +106,16 @@ export default function SignalsPage() {
       {/* Header */}
       <div className="border-b border-line pb-4">
         <div className="font-mono text-[10.5px] text-signal tracking-[0.1em] uppercase mb-1">
-          SURPRISE RECORD DYNAMIC PIPELINE
+          INTELLIGENCE COLLECTION
         </div>
         <h1 className="font-display font-bold text-2xl text-paper">
           OSINT Intelligence Collection &amp; Dynamic Ingestion
         </h1>
         <p className="font-sans text-[13px] text-paper-dim mt-1">
-          Test SIGNAL against unseen external geopolitical events. The dynamic engine extracts entities, identifies dependency paths, calculates transparent risk scores, and generates transformation recommendations in real-time.
+          Save geopolitical developments and source details for research, forecasting, and verification.
         </p>
       </div>
 
-      <p className="text-sm text-paper-dim">This workspace uses manually submitted evidence and the AuraTech sample dependency graph when demo data is enabled. Scores use an unverified-source weight.</p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-7 items-start">
         {/* Dynamic Ingestion Form */}
         <div className="reticle border border-line bg-panel p-6 space-y-5">
@@ -124,7 +124,7 @@ export default function SignalsPage() {
 
           <div className="flex items-center justify-between border-b border-line pb-3">
             <h3 className="font-display font-bold text-base text-paper flex items-center gap-2">
-              <span className="text-signal">◉</span> Analyze enterprise exposure
+              <span className="text-signal">◉</span> Record a development
             </h3>
             <span className="font-mono text-[9.5px] text-signal border border-signal-dim px-2 py-0.5">
               RULE-BASED
@@ -204,7 +204,7 @@ export default function SignalsPage() {
               disabled={submitting}
               className="btn btn-primary w-full py-3 justify-center text-[12px] font-mono tracking-wider disabled:opacity-50 cursor-pointer"
             >
-              {submitting ? "EXECUTING GRAPH PIPELINE..." : "RUN DYNAMIC SURPRISE RECORD PIPELINE"}
+              {submitting ? "SAVING INTELLIGENCE…" : "SAVE INTELLIGENCE"}
             </button>
           </form>
         </div>
@@ -213,9 +213,9 @@ export default function SignalsPage() {
         <div className="border border-line bg-panel p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-line pb-3">
             <h3 className="font-display font-bold text-base text-paper flex items-center gap-2">
-              <span className="text-confirmed">●</span> DYNAMIC PIPELINE EXECUTION READOUT
+              <span className="text-confirmed">●</span> INGESTION RESULT
             </h3>
-            <span className="font-mono text-[10px] text-paper-faint">STEP-BY-STEP LINEAGE</span>
+            <span className="font-mono text-[10px] text-paper-faint">SOURCE RECORD</span>
           </div>
 
           {errorMsg && (
@@ -229,9 +229,9 @@ export default function SignalsPage() {
               <div className="w-10 h-10 border border-signal flex items-center justify-center text-lg animate-spin">
                 ◐
               </div>
-              <h4 className="text-sm font-semibold text-paper">TRAVERSING ENTERPRISE GRAPH</h4>
+              <h4 className="text-sm font-semibold text-paper">SAVING INTELLIGENCE</h4>
               <p className="font-sans text-[12.5px] text-paper-dim max-w-sm">
-                Extracting entities, matching supplier dependencies, calculating transparent risk scores, and generating transformation strategies...
+                Saving the submitted record and extracting country references.
               </p>
             </div>
           )}
@@ -241,9 +241,9 @@ export default function SignalsPage() {
               <div className="w-10 h-10 border border-signal-dim flex items-center justify-center text-signal text-lg">
                 ◉
               </div>
-              <h4 className="text-sm font-semibold text-paper">READY FOR UNSEEN INPUT</h4>
+              <h4 className="text-sm font-semibold text-paper">READY TO INGEST</h4>
               <p className="font-sans text-[12.5px] text-paper-dim max-w-sm">
-                Submit any hypothetical export restriction, tariff, port strike, or policy notice to observe dynamic graph traversal, risk scoring, and evidence extraction.
+                Submit a geopolitical development with its source details to make it available for research and IntelMap.
               </p>
             </div>
           )}
@@ -260,22 +260,8 @@ export default function SignalsPage() {
                 </div>
               </div>
 
-              {dynamicResult.risks_generated.length === 0 && (
-                <p className="text-sm text-paper-dim">Signal saved. No matching enterprise dependencies were found.</p>
-              )}
-              {dynamicResult.risks_generated.map((risk: any) => (
-                <div key={risk.id} className="p-4 bg-ink border border-line space-y-2">
-                  <p className="font-mono text-xs text-caution">Risk score {risk.normalized_score}/100</p>
-                  <h4 className="font-semibold text-paper">{risk.risk_title}</h4>
-                  <p className="text-sm text-paper-dim">{risk.description}</p>
-                </div>
-              ))}
-              {dynamicResult.transformation_opportunities.map((opportunity: any) => (
-                <div key={opportunity.id} className="p-4 bg-ink border border-line space-y-2">
-                  <h4 className="font-semibold text-paper">{opportunity.title}</h4>
-                  <p className="text-sm text-paper-dim">{opportunity.description}</p>
-                </div>
-              ))}
+              <p className="text-sm text-confirmed">Intelligence saved.</p>
+              <Link className="btn btn-primary" href={`/intelmap?signal=${encodeURIComponent(dynamicResult.signal.id)}`}>Generate IntelMap →</Link>
             </div>
           )}
         </div>
@@ -293,6 +279,7 @@ export default function SignalsPage() {
             return <li key={signal.id} className="py-3">
               <strong className="text-paper">{signal.title}</strong>
               <p className="text-sm text-paper-dim">{demo ? "Demo record" : signal.source_name} · {signal.published_date}</p>
+              {!demo && <Link className="mr-4 text-sm text-signal" href={`/intelmap?signal=${encodeURIComponent(signal.id)}`}>Generate IntelMap →</Link>}
               {hasSource && <a className="text-sm text-signal" href={signal.source_url} target="_blank" rel="noreferrer">Submitted source ↗</a>}
             </li>;
           })}

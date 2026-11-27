@@ -1,4 +1,6 @@
-export type Article = { id: string; title: string; excerpt: string; publisher: string; url: string; published_at: string; provenance?: string };
+import { analystApi } from "@/lib/analyst-api";
+
+export type Article = { id: string; title: string; excerpt: string; publisher: string; url: string; published_at: string; provenance?: string; date_is_retrieval_time?: boolean };
 export type Evidence = { id: string; article: Article; stance: string; reasoning: string; at: string };
 export type Revision = { id: string; probability: number; rationale: string; at: string; provider: string; model: string };
 export type Forecast = {
@@ -15,6 +17,8 @@ export type Forecast = {
   issued_at: string;
   deadline: string;
   status: string;
+  verification_state: string;
+  last_evaluated_at: string | null;
   truth_value: number | null;
   evidence: Evidence[];
   revisions: Revision[];
@@ -22,6 +26,8 @@ export type Forecast = {
 };
 export type MapDetails = {
   id: string;
+  previous_map_id: string | null;
+  next_map_ids: string[];
   event: { title: string; date: string; classification: string; actors: string[]; regions: string[]; reported_developments: string[]; unverified_claims: string[] };
   articles: Article[];
   forecasts: Forecast[];
@@ -36,7 +42,7 @@ export type Score = { count: number; brier: number | null; calibration: { predic
 export type Metrics = {
   total: number; active: number; resolved: number; confirmed: number; refuted: number; inconclusive: number;
   resolution_rate: number | null; average_horizon_days: number | null; original: Score; revised_24h: Score;
-  by_domain: Record<string, Score>; by_model: Record<string, Score>; revised_by_model: Record<string, Score>;
+  by_horizon: Record<string, Score>; by_domain: Record<string, Score>; by_model: Record<string, Score>; revised_by_model: Record<string, Score>;
 };
 export type Infrastructure = {
   pending_jobs: number; failed_jobs: number;
@@ -50,10 +56,5 @@ export const day = (value: string) => value.slice(0, 10);
 export const percent = (value: number) => `${(value * 100).toFixed(0)}%`;
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`/api/intelmap/${path}`, { cache: "no-store", ...options });
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(typeof error?.detail === "string" ? error.detail : "Could not load IntelMap.");
-  }
-  return response.json();
+  return analystApi<T>(`/api/intelmap/${path}`, options);
 }

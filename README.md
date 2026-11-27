@@ -33,15 +33,17 @@ use a different proxy target. The backend defaults to
 `signal.sqlite3`. Set `DATABASE_URL=sqlite:///./signal.db` explicitly to open the legacy local database.
 Set `SIGNAL_SEED_DEMO=1` before starting the backend to enable the AuraTech example.
 
-### IntelMap
+### Geopolitical workstation
 
-Open **IntelMap** or select **Generate IntelMap** on a news card. IntelMap queues a predictive graph,
-keeps the original probabilities and supporting evidence, tracks revisions and analyst resolutions,
-and reports performance when enough forecasts resolve. Cloud inference needs a configured free-tier
-provider. The older rule-based scenarios still appear in the overview.
+The primary navigation is **Overview**, **OSINT Ingestion**, **IntelMap**, and **Assistant**.
+Generate an IntelMap from a news card, saved OSINT record, external HTTPS article, or manual event.
+The Assistant uses a hosted model with conversation history and citations to matching SIGNAL records.
+Forecasts show their assumptions, evidence, model provenance, and uncertainty.
 
-For architecture, provisioning and forecasting details, see the [IntelMap specification](docs/INTELMAP_SPEC.md),
-[cloud deployment guide](docs/DEPLOYMENT.md), and [provider configuration](docs/AI_PROVIDERS.md).
+The current production stack is Vercel for the frontend and Docker FastAPI on Render. See the
+[deployment guide](docs/DEPLOYMENT.md), [IntelMap specification](docs/INTELMAP_SPEC.md),
+and [provider configuration](docs/AI_PROVIDERS.md). Forecasts and conversations require hosted
+PostgreSQL in production.
 
 ### Sources and forecasting
 

@@ -1,175 +1,141 @@
 "use client";
 
-import { apiUrl } from "@/lib/api-url";
-import { useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import Markdown from "react-markdown";
+import AnalystAccess from "@/components/AnalystAccess";
+import { analystApi } from "@/lib/analyst-api";
+
+type Source = { id: string; title: string; url: string | null; publisher: string; published_at: string; provenance: string };
+type Message = { role: "user" | "assistant"; text: string; uncertainty?: string; sources?: Source[]; at: string };
+type ThreadTitle = { id: string; title: string; updated_at: string };
+type Thread = ThreadTitle & { messages: Message[] };
+
+const examples = [
+  "Summarize the latest developments in global trade policy.",
+  "Compare the strategic priorities of India and Japan in the Indo-Pacific.",
+  "Which indicators should I watch for in the latest IntelMap forecasts?",
+];
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<any[]>([
-    {
-      sender: "ai",
-      text: "Ask about current headlines, daily market closes, published scenarios, or your saved enterprise risks.",
-      evidence: [],
-      related_risks: []
-    }
-  ]);
-  const [inputQuery, setInputQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [requestError, setRequestError] = useState("");
+  const [thread, setThread] = useState<Thread | null>(null);
+  const [history, setHistory] = useState<ThreadTitle[]>([]);
+  const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [access, setAccess] = useState(0);
+  const end = useRef<HTMLDivElement>(null);
 
-  const exampleQuestions = [
-    "What are our highest geopolitical risks?",
-    "Show me the latest world news.",
-    "What was the latest close for NVDA?",
-    "Show me the latest forecasts."
-  ];
+  useEffect(() => {
+    const controller = new AbortController();
+    analystApi<ThreadTitle[]>("/api/assistant/conversations", { signal: controller.signal })
+      .then(rows => { if (!controller.signal.aborted) { setHistory(rows); setError(""); } })
+      .catch(reason => { if (!controller.signal.aborted) setError(reason.message); });
+    return () => controller.abort();
+  }, [access]);
 
-  async function handleSend(queryText?: string) {
-    const q = queryText || inputQuery;
-    if (!q || !q.trim() || loading) return;
+  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [thread, pending]);
 
-    const newMsgs = [...messages, { sender: "user", text: q }];
-    setMessages(newMsgs);
-    setInputQuery("");
-    setRequestError("");
-    setLoading(true);
+  async function open(id: string) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try { setThread(await analystApi<Thread>(`/api/assistant/conversations/${encodeURIComponent(id)}`)); }
+    catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
+  }
 
+  async function send(value: string) {
+    const message = value.trim();
+    if (message.length < 2 || busy) return;
+    setBusy(true);
+    setPending(message);
+    setDraft("");
+    setError("");
     try {
-      const res = await fetch(apiUrl("/api/chat/"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q })
+      const updated = await analystApi<Thread>("/api/assistant/messages", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, conversation_id: thread?.id || null }),
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        setMessages([
-          ...newMsgs,
-          {
-            sender: "ai",
-            text: data.answer,
-            evidence: data.evidence || [],
-            sources: data.sources || [],
-            related_risks: data.related_risks || [],
-            related_nodes: data.related_nodes || []
-          }
-        ]);
-      } else {
-        throw new Error(`Server status ${res.status}`);
-      }
-    } catch {
-      setRequestError("Assistant unavailable. Retry when the API is reachable.");
+      setThread(updated);
+      setHistory(previous => [updated, ...previous.filter(item => item.id !== updated.id)].slice(0, 25));
+    } catch (reason) {
+      setError((reason as Error).message);
+      setDraft(message);
     } finally {
-      setLoading(false);
+      setBusy(false);
+      setPending("");
     }
   }
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="border-b border-line pb-4">
-        <div className="font-mono text-[10.5px] text-signal tracking-[0.1em] uppercase mb-1">
-          INTELLIGENCE &amp; ENTERPRISE RECORDS
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    send(draft);
+  }
+
+  function newConversation() {
+    setThread(null);
+    setDraft("");
+    setError("");
+  }
+
+  return <div className="space-y-4">
+    <header className="border-b border-line pb-4">
+      <h1 className="font-display text-3xl font-semibold text-paper">Intelligence Assistant</h1>
+      <p className="mt-1 text-paper-dim">Research geopolitical developments, examine sources, and discuss IntelMap forecasts.</p>
+    </header>
+    <AnalystAccess onChange={() => { setThread(null); setHistory([]); setAccess(value => value + 1); }} />
+    <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <aside className="border border-line bg-panel p-4">
+        <button type="button" disabled={busy} className="btn btn-primary w-full" onClick={newConversation}>New conversation</button>
+        <h2 className="mb-2 mt-4 text-sm font-semibold text-paper">History</h2>
+        {!history.length && <p className="text-sm text-paper-dim">No saved conversations.</p>}
+        <ul className="max-h-64 space-y-1 overflow-auto">
+          {history.map(item => <li key={item.id}>
+            <button type="button" disabled={busy} aria-current={thread?.id === item.id ? "true" : undefined}
+              className="block w-full truncate border border-line p-2 text-left text-sm text-paper-dim hover:text-signal"
+              title={item.title} onClick={() => open(item.id)}>{item.title}</button>
+          </li>)}
+        </ul>
+      </aside>
+      <section aria-label="Conversation" className="min-w-0 border border-line bg-panel p-4">
+        <div className="min-h-[20rem] max-h-[58vh] space-y-4 overflow-auto pr-1">
+          {!thread && !pending && <div className="space-y-3 p-3">
+            <h2 className="font-display text-lg text-paper">Start an intelligence query</h2>
+            <div className="flex flex-wrap gap-2">{examples.map(example =>
+              <button type="button" key={example} className="border border-line px-3 py-2 text-left text-sm text-signal hover:bg-panel-2"
+                disabled={busy} onClick={() => send(example)}>{example}</button>)}</div>
+          </div>}
+          {thread?.messages.map((message, index) => <article key={index}
+            className={`w-fit max-w-full border p-3 text-sm ${message.role === "user" ? "ml-auto border-signal-dim bg-panel-2 text-paper" : "border-line bg-ink text-paper-dim"}`}>
+            <p className="mb-2 text-xs font-semibold text-paper-faint">{message.role === "user" ? "You" : "SIGNAL analysis"}</p>
+            {message.role === "user" ? <p className="whitespace-pre-wrap">{message.text}</p> :
+              <div className="space-y-2 break-words [&_h1]:text-paper [&_h2]:text-paper [&_li]:ml-4 [&_ol]:list-decimal [&_ul]:list-disc">
+                <Markdown skipHtml allowedElements={["p", "h1", "h2", "h3", "h4", "strong", "em", "ul", "ol", "li", "blockquote", "code", "pre", "hr", "br"]} unwrapDisallowed>{message.text}</Markdown>
+              </div>}
+            {message.uncertainty && <p className="mt-3 text-sm text-caution"><strong>Uncertainty.</strong> {message.uncertainty}</p>}
+            {!!message.sources?.length && <ul aria-label="Sources" className="mt-3 space-y-2">
+              {message.sources.map(source => <li key={source.id} className="border border-line bg-panel p-2">
+                {source.url && /^https?:\/\//i.test(source.url) ?
+                  <a className="text-signal hover:underline" href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a> :
+                  <span className="text-paper">{source.title}</span>}
+                <p className="text-xs text-paper-faint">{source.publisher} · {source.published_at.slice(0,10)} · {source.provenance.replaceAll("_", " ")}</p>
+              </li>)}
+            </ul>}
+          </article>)}
+          {pending && <p className="ml-auto w-fit whitespace-pre-wrap border border-signal-dim bg-panel-2 p-3 text-sm text-paper">{pending}</p>}
+          {busy && <p role="status" className="text-sm text-paper-dim">{pending ? "Retrieving evidence and preparing an answer…" : "Loading conversation…"}</p>}
+          <div ref={end} />
         </div>
-        <h1 className="font-display font-bold text-2xl text-paper">
-          SIGNAL Assistant
-        </h1>
-        <p className="font-sans text-[13px] text-paper-dim mt-1">
-          This assistant searches SIGNAL’s collected news, market closes, published scenarios, and saved workspace records.
-        </p>
-      </div>
-
-      {/* Bracketed Query Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 font-mono text-[11px]">
-        <span className="text-paper-faint whitespace-nowrap">PRESET QUERIES:</span>
-        {exampleQuestions.map((q, idx) => (
-          <button
-            key={idx}
-            type="button"
-            disabled={loading}
-            onClick={() => handleSend(q)}
-            className="btn btn-ghost px-3 py-1.5 whitespace-nowrap text-[11px] cursor-pointer"
-          >
-            {q}
-          </button>
-        ))}
-      </div>
-
-      {/* Terminal Viewport */}
-      <div className="reticle border border-line bg-panel p-6 space-y-6 min-h-[460px] flex flex-col justify-between">
-        <div className="tick-tr" />
-        <div className="tick-bl" />
-
-        <div className="space-y-5 overflow-y-auto max-h-[480px] pr-1">
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex flex-col ${msg.sender === "user" ? "items-end" : "items-start"} space-y-2`}
-            >
-              <div className="font-mono text-[9.5px] text-paper-faint tracking-wider">
-                {msg.sender === "user" ? "USER COMMAND" : "SIGNAL INTELLIGENCE READOUT"}
-              </div>
-              <div
-                className={`max-w-2xl whitespace-pre-line p-4 text-[13px] leading-relaxed border ${
-                  msg.sender === "user"
-                    ? "bg-signal text-ink font-semibold font-mono border-signal"
-                    : "bg-ink text-paper font-sans border-line"
-                }`}
-              >
-                {msg.text}
-              </div>
-
-              {msg.sources?.length > 0 && <ul aria-label="Sources" className="max-w-2xl space-y-1 text-sm">
-                {msg.sources.map((source: { url: string; title: string }) => <li key={source.url}>
-                  <a href={source.url} target="_blank" rel="noreferrer" className="text-signal hover:underline">{source.title} ↗</a>
-                </li>)}
-              </ul>}
-              {/* Supporting Evidence Citations */}
-              {msg.sender === "ai" && msg.evidence && msg.evidence.length > 0 && (
-                <div className="max-w-2xl w-full p-3 bg-panel-2 border border-signal-dim space-y-2 font-mono text-[10.5px]">
-                  <span className="text-signal font-bold tracking-wider block">SUPPORTING EVIDENCE CITATIONS:</span>
-                  {msg.evidence.map((ev: any) => (
-                    <div key={ev.id} className="p-2.5 bg-ink border border-line text-paper-dim italic">
-                      "{ev.snippet}" — <strong className="text-confirmed not-italic font-normal">{ev.source_name} ({ev.publication_date})</strong>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {requestError && <p role="alert" className="text-alert">{requestError}</p>}
-          {loading && (
-            <div className="font-mono text-[11px] text-signal animate-pulse flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-signal rounded-full animate-ping" />
-              TRAVERSING GRAPH RELATIONSHIPS &amp; EVALUATING OSINT EVIDENCE...
-            </div>
-          )}
-        </div>
-
-        {/* Input Bar */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend(inputQuery);
-          }}
-          className="mt-4 pt-4 border-t border-line flex items-center gap-3"
-        >
-          <input
-            type="text"
-            value={inputQuery}
-            onChange={(e) => setInputQuery(e.target.value)}
-            placeholder="Ask a strategic intelligence question (e.g. 'What happens if SMIC becomes unavailable?')..."
-            className="flex-1 bg-ink border border-line p-3 font-mono text-[11.5px] text-paper focus:outline-none focus:border-signal placeholder:text-paper-faint"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn btn-primary px-6 py-3 text-[12px] font-mono tracking-wider font-semibold disabled:opacity-50 cursor-pointer"
-          >
-            ASK SIGNAL
-          </button>
+        {error && <p role="alert" className="mt-2 text-sm text-alert">{error}</p>}
+        <form className="mt-4 flex flex-wrap items-end gap-2 border-t border-line pt-3" onSubmit={submit}>
+          <label className="min-w-48 flex-1 text-sm text-paper-dim">Message
+            <textarea required rows={2} maxLength={4000} value={draft} onChange={event => setDraft(event.target.value)}
+              className="mt-1 block w-full border border-line bg-ink p-2 text-paper" />
+          </label>
+          <button type="submit" disabled={busy || draft.trim().length < 2} className="btn btn-primary">Send</button>
         </form>
-      </div>
+      </section>
     </div>
-  );
+  </div>;
 }
