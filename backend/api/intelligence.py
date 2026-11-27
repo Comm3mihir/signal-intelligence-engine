@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,7 +12,10 @@ router = APIRouter(prefix="/api/intelligence", tags=["World Intelligence"])
 
 @router.get("/")
 def get_intelligence(db: Session = Depends(get_db)):
-    snapshot = refresh(db)
+    cloud = os.getenv("SIGNAL_ENV") == "production" or os.getenv("VERCEL")
+    snapshot = read_record(db, "snapshot", {}) if cloud else refresh(db)
+    if not snapshot:
+        raise HTTPException(503, detail="Waiting for the first scheduled news refresh.")
     return {
         **snapshot,
         "sources": [

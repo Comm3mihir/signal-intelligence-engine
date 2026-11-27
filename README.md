@@ -10,7 +10,7 @@
 With Docker installed, run `docker compose up --build` and open http://localhost:3000.
 The API documentation is at http://localhost:8000/docs. SQLite data persists in the Compose volume.
 
-For development, run these commands from the repository root:
+For development, use Python 3.11 or later and Node.js 20.9 or later. Run these commands from the repository root:
 
 ```bash
 python -m venv .venv
@@ -29,6 +29,16 @@ The frontend proxies requests to `http://127.0.0.1:8000` by default. Set `SIGNAL
 before starting the dev server or creating a production build to use another backend. The backend defaults to
 `signal.sqlite3`. Set `DATABASE_URL=sqlite:///./signal.db` explicitly to open the legacy local database.
 Set `SIGNAL_SEED_DEMO=1` before starting the backend to enable the AuraTech example.
+
+### IntelMap
+
+Open **IntelMap** or select **Generate IntelMap** on a news card. IntelMap queues a predictive graph,
+keeps the original probabilities and supporting evidence, tracks revisions and analyst resolutions,
+and reports performance when enough forecasts resolve. Cloud inference needs a configured free-tier
+provider. The older rule-based scenarios still appear in the overview.
+
+For architecture, provisioning and forecasting details, see the [IntelMap specification](docs/INTELMAP_SPEC.md),
+[cloud deployment guide](docs/DEPLOYMENT.md), and [provider configuration](docs/AI_PROVIDERS.md).
 
 ### Sources and forecasting
 
